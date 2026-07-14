@@ -1,0 +1,3786 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OUR SYSTEM IT SOLUTIONS - Online Examination</title>
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- Firebase (compat SDK - easy single-file use) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+<!-- jsPDF for certificate generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- SheetJS for Excel export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- QRCode.js for dynamic certificate verification QR codes -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<!-- PDF.js for reading/rendering PDF pages (text + image extraction) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<!-- Tesseract.js for OCR on scanned/image-based PDF pages -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+
+
+<style>
+  /* Custom brand colors used beyond tailwind defaults */
+  :root{
+    --brand-blue:#2563EB;
+    --brand-blue-dark:#1E40AF;
+  }
+  body{ font-family:'Segoe UI', Arial, sans-serif; }
+
+  /* Disable text selection during test to discourage copy-paste */
+  .no-select{
+    user-select:none;
+    -webkit-user-select:none;
+    -moz-user-select:none;
+    -ms-user-select:none;
+  }
+
+  /* Simple fade transition between screens */
+  .screen{ display:none; animation:fadeIn .3s ease-in-out; }
+  .screen.active{ display:block; }
+  @keyframes fadeIn{ from{opacity:0} to{opacity:1} }
+
+  /* Option card hover/selected styles */
+  .option-card{ transition:all .15s ease-in-out; }
+  .option-card:hover{ border-color:var(--brand-blue); background:#EFF6FF; }
+  .option-card.selected{ border-color:var(--brand-blue); background:#DBEAFE; font-weight:600; }
+
+  /* Timer pulse when time is low */
+  .timer-danger{ animation:pulse 1s infinite; color:#DC2626 !important; }
+  @keyframes pulse{ 0%,100%{opacity:1} 50%{opacity:.5} }
+
+  ::-webkit-scrollbar{ width:8px; }
+  ::-webkit-scrollbar-thumb{ background:#93C5FD; border-radius:4px; }
+
+  #certificateArea{ font-family: 'Georgia', serif; }
+
+  /* Live indicator dot for real-time admin panel */
+  .live-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; background:#16a34a; animation:livePulse 1.5s infinite; }
+  @keyframes livePulse{ 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ===== Excel / PDF Import System ===== */
+  .dropzone{ border:2px dashed #93C5FD; border-radius:14px; background:#F8FAFF; transition:all .15s ease-in-out; }
+  .dropzone.dragover{ border-color:#2563EB; background:#EFF6FF; transform:scale(1.01); }
+  .import-progress-bar{ transition:width .25s ease-out; }
+  .status-badge{ display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:600; padding:2px 8px; border-radius:9999px; }
+  .status-valid{ background:#DCFCE7; color:#15803D; }
+  .status-error{ background:#FEE2E2; color:#B91C1C; }
+  .status-duplicate{ background:#FEF9C3; color:#A16207; }
+  .import-tab{ cursor:pointer; padding:6px 14px; border-radius:8px; font-size:13px; font-weight:600; color:#6B7280; }
+  .import-tab.active{ background:#2563EB; color:#fff; }
+  .spinner{ border:3px solid #DBEAFE; border-top-color:#2563EB; border-radius:50%; width:18px; height:18px; animation:spin .7s linear infinite; display:inline-block; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .filetype-tab{ cursor:pointer; padding:10px 18px; border-radius:10px; font-size:13px; font-weight:700; color:#6B7280; border:2px solid #E5E7EB; display:flex; align-items:center; gap:6px; }
+  .filetype-tab.active{ background:#EFF6FF; border-color:#2563EB; color:#1E40AF; }
+  .edit-field{ border:1px solid #D1D5DB; border-radius:6px; padding:4px 8px; font-size:12px; width:100%; }
+  .edit-field:focus{ outline:none; border-color:#2563EB; box-shadow:0 0 0 2px #DBEAFE; }
+  .pdf-page-status{ display:flex; align-items:center; gap:8px; font-size:12px; padding:4px 0; }
+
+  /* Toast notifications */
+  #toastContainer{ position:fixed; top:16px; right:16px; z-index:80; display:flex; flex-direction:column; gap:10px; max-width:360px; width:calc(100% - 32px); }
+  .toast{ animation:toastIn .25s ease-out; border-radius:10px; padding:12px 14px; font-size:13px; font-weight:500; box-shadow:0 8px 24px rgba(0,0,0,.12); display:flex; align-items:start; gap:8px; }
+  .toast.success{ background:#F0FDF4; color:#166534; border:1px solid #BBF7D0; }
+  .toast.error{ background:#FEF2F2; color:#991B1B; border:1px solid #FECACA; }
+  .toast.info{ background:#EFF6FF; color:#1E40AF; border:1px solid #BFDBFE; }
+  @keyframes toastIn{ from{ opacity:0; transform:translateX(20px); } to{ opacity:1; transform:translateX(0); } }
+  @media (max-width:640px){
+    #toastContainer{ top:auto; bottom:16px; right:8px; left:8px; max-width:none; }
+  }
+</style>
+</head>
+<body class="bg-gray-50 no-select">
+
+<header class="bg-white shadow-md sticky top-0 z-40">
+  <div class="max-w-6xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex flex-wrap items-center justify-between gap-2">
+    <div class="flex items-center gap-2 sm:gap-3">
+      <svg width="36" height="36" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" class="sm:w-[46px] sm:h-[46px] shrink-0">
+        <rect x="4" y="8" width="36" height="26" rx="2" fill="#2563EB"/>
+        <rect x="8" y="12" width="28" height="18" rx="1" fill="#FFFFFF"/>
+        <rect x="16" y="34" width="12" height="4" fill="#2563EB"/>
+        <rect x="10" y="38" width="24" height="3" rx="1.5" fill="#1E40AF"/>
+        <circle cx="48" cy="40" r="14" fill="#FBBF24" stroke="#2563EB" stroke-width="2"/>
+        <path d="M42 40l4 4 8-8" stroke="#1E40AF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M44 52 L48 60 L52 52" fill="#2563EB"/>
+      </svg>
+      <div class="min-w-0">
+        <h1 class="text-sm sm:text-xl font-bold text-blue-700 leading-tight truncate">OUR SYSTEM IT SOLUTIONS</h1>
+        <p class="text-[10px] sm:text-xs text-gray-500">Online Examination Portal</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-1.5 sm:gap-2">
+      <button onclick="showScreen('verifyScreen')" class="text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-green-600 text-green-700 hover:bg-green-50 font-medium whitespace-nowrap">
+        <span class="hidden sm:inline">Verify Certificate</span><span class="sm:hidden">Verify</span>
+      </button>
+      <button id="adminNavBtn" onclick="showScreen('adminLoginScreen')" class="hidden text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 font-medium whitespace-nowrap">
+        <span class="hidden sm:inline">Admin Panel</span><span class="sm:hidden">Admin</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-4xl mx-auto px-4 py-6">
+
+<section id="registrationScreen" class="screen active">
+  <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-10">
+    <h2 class="text-2xl font-bold text-gray-800 mb-1">Student Registration</h2>
+    <p class="text-gray-500 mb-6">Please fill your details accurately before starting the test.</p>
+
+    <form id="registrationForm" class="space-y-5" onsubmit="return handleRegistration(event)">
+      <!-- Honeypot field: invisible to real users via CSS, but bots that
+           auto-fill every field will populate it, giving a cheap signal
+           to silently reject the submission without alerting the bot. -->
+      <div style="position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden;" aria-hidden="true">
+        <label for="regWebsite">Website</label>
+        <input type="text" id="regWebsite" name="regWebsite" tabindex="-1" autocomplete="off">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+        <input type="text" id="regFullName" required maxlength="80" placeholder="e.g. Rahul Kumar"
+          class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Father's Name *</label>
+        <input type="text" id="regFatherName" required maxlength="80" placeholder="e.g. Suresh Kumar"
+          class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div class="grid sm:grid-cols-2 gap-5">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
+          <input type="tel" id="regPhone" required pattern="[0-9]{10}" maxlength="10" placeholder="10-digit mobile number"
+            class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Date of Birth *</label>
+          <input type="date" id="regDOB" required
+            class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Email Address *</label>
+        <input type="email" id="regEmail" required maxlength="120" placeholder="e.g. student@example.com"
+          class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+      <div id="regError" class="hidden text-red-600 text-sm font-medium"></div>
+      <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition">
+        Proceed to Instructions →
+      </button>
+    </form>
+  </div>
+</section>
+
+<section id="instructionsScreen" class="screen">
+  <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-10">
+    <h2 class="text-2xl font-bold text-gray-800 mb-1">Basic Computer Knowledge Test</h2>
+    <p class="text-gray-500 mb-6">Welcome, <span id="instrStudentName" class="font-semibold text-blue-700"></span>. Please read the instructions carefully.</p>
+
+    <div class="grid sm:grid-cols-3 gap-4 mb-6">
+      <div class="bg-blue-50 rounded-xl p-4 text-center">
+        <p class="text-3xl font-bold text-blue-700" id="instrTotalQ">50</p>
+        <p class="text-sm text-gray-600">Total Questions</p>
+      </div>
+      <div class="bg-blue-50 rounded-xl p-4 text-center">
+        <p class="text-3xl font-bold text-blue-700">90</p>
+        <p class="text-sm text-gray-600">Minutes Duration</p>
+      </div>
+      <div class="bg-blue-50 rounded-xl p-4 text-center">
+        <p class="text-3xl font-bold text-blue-700">4</p>
+        <p class="text-sm text-gray-600">Options per Question</p>
+      </div>
+    </div>
+
+    <h3 class="font-semibold text-gray-800 mb-2">Rules & Instructions:</h3>
+    <ul class="list-disc list-inside space-y-2 text-gray-700 mb-8 text-sm sm:text-base">
+      <li>The test contains <strong><span id="instrTotalQBullet">50</span> multiple-choice questions</strong> covering Hardware, Software, MS Word, MS Excel, PowerPoint and Internet basics.</li>
+      <li>Total time allowed is <strong>90 minutes</strong>. A countdown timer will be visible at all times.</li>
+      <li>The test will <strong>auto-submit</strong> automatically when the timer reaches 00:00.</li>
+      <li>Each question has exactly <strong>one correct answer</strong> out of 4 options.</li>
+      <li>You can navigate using <strong>Next / Previous</strong> buttons and change answers anytime before submitting.</li>
+      <li>Your answers are auto-saved locally — accidental page refresh will <strong>not</strong> erase your progress.</li>
+      <li><strong>Copy-paste and right-click are disabled</strong> during the test to ensure fairness.</li>
+      <li>Do not close or refresh the browser tab unnecessarily.</li>
+      <li>Once submitted, you cannot re-attempt the test.</li>
+    </ul>
+
+    <button onclick="startTest()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition">
+      Start Test
+    </button>
+  </div>
+</section>
+
+<section id="testScreen" class="screen">
+  <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-8">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-5 pb-4 border-b">
+      <div class="text-sm font-medium text-gray-600">
+        Question <span id="qProgress" class="text-blue-700 font-bold">1/50</span>
+      </div>
+      <div id="timerBox" class="bg-red-50 border border-red-200 px-4 py-2 rounded-lg font-mono text-lg font-bold text-red-600">
+        ⏱ <span id="timerDisplay">90:00</span>
+      </div>
+    </div>
+
+    <div class="w-full bg-gray-200 rounded-full h-2 mb-6">
+      <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width:1%"></div>
+    </div>
+
+    <div id="tabSwitchWarning" class="hidden mb-4 bg-yellow-50 border border-yellow-300 text-yellow-800 text-sm rounded-lg p-3">
+      ⚠ You switched away from the test tab/window <span id="tabSwitchCount">0</span> time(s). Please stay on this tab until you submit.
+    </div>
+
+    <div class="mb-6">
+      <span id="qSection" class="inline-block text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-1 rounded mb-3"></span>
+      <p id="qText" class="text-lg font-semibold text-gray-800 leading-relaxed"></p>
+    </div>
+
+    <div id="optionsContainer" class="space-y-3 mb-8"></div>
+
+    <div class="flex flex-col sm:flex-row flex-wrap gap-3 sm:justify-between">
+      <button onclick="prevQuestion()" id="prevBtn" class="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 order-2 sm:order-1">
+        ← Previous
+      </button>
+      <div class="flex flex-wrap gap-3 order-1 sm:order-2">
+        <button onclick="clearAnswer()" class="px-5 py-2.5 rounded-lg border border-gray-300 text-gray-500 font-medium hover:bg-gray-50">
+          Clear
+        </button>
+        <button onclick="toggleMarkForReview()" id="markReviewBtn" class="px-5 py-2.5 rounded-lg border border-purple-500 text-purple-600 font-medium hover:bg-purple-50">
+          🚩 Mark for Review
+        </button>
+        <button onclick="goToReview()" class="px-5 py-2.5 rounded-lg border border-blue-600 text-blue-600 font-medium hover:bg-blue-50">
+          Review Answers
+        </button>
+        <button onclick="nextQuestion()" id="nextBtn" class="px-5 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">
+          Next →
+        </button>
+        <button onclick="goToReview()" id="submitBtn" class="hidden px-5 py-2.5 rounded-lg bg-green-600 text-white font-medium hover:bg-green-700">
+          Review & Submit
+        </button>
+      </div>
+    </div>
+    <p class="text-[11px] text-gray-400 mt-2">Tip: use ← / → arrow keys to move between questions, and 1–4 or A–D to select an option.</p>
+
+    <div class="mt-8 pt-6 border-t">
+      <p class="text-sm font-medium text-gray-600 mb-3">Question Palette:</p>
+      <div id="questionPalette" class="grid grid-cols-5 sm:grid-cols-10 gap-2"></div>
+      <div class="flex gap-4 mt-3 text-xs text-gray-500 flex-wrap">
+        <span><span class="inline-block w-3 h-3 bg-green-500 rounded-sm mr-1"></span>Answered</span>
+        <span><span class="inline-block w-3 h-3 bg-gray-300 rounded-sm mr-1"></span>Not Answered</span>
+        <span><span class="inline-block w-3 h-3 bg-purple-500 rounded-sm mr-1"></span>Marked for Review</span>
+        <span><span class="inline-block w-3 h-3 bg-blue-600 rounded-sm mr-1"></span>Current</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="reviewScreen" class="screen">
+  <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-8">
+    <h2 class="text-xl font-bold text-gray-800 mb-1">Review Your Answers</h2>
+    <p class="text-gray-500 text-sm mb-5">Check your answers below. Click any question to go back and change it before final submission.</p>
+
+    <div class="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-6">
+      <div class="bg-blue-50 rounded-xl p-3 text-center">
+        <p class="text-xl font-bold text-blue-700" id="reviewTotal">0</p>
+        <p class="text-xs text-gray-600">Total</p>
+      </div>
+      <div class="bg-green-50 rounded-xl p-3 text-center">
+        <p class="text-xl font-bold text-green-700" id="reviewAnswered">0</p>
+        <p class="text-xs text-gray-600">Answered</p>
+      </div>
+      <div class="bg-gray-100 rounded-xl p-3 text-center">
+        <p class="text-xl font-bold text-gray-600" id="reviewUnanswered">0</p>
+        <p class="text-xs text-gray-600">Not Answered</p>
+      </div>
+      <div class="bg-yellow-50 rounded-xl p-3 text-center col-span-3 sm:col-span-1">
+        <p class="text-xl font-bold text-yellow-700" id="reviewNegNote">-0.25</p>
+        <p class="text-xs text-gray-600">Per Wrong Answer</p>
+      </div>
+    </div>
+
+    <div id="reviewList" class="space-y-2 mb-6 max-h-[50vh] overflow-y-auto pr-1"></div>
+
+    <div class="flex flex-col sm:flex-row gap-3">
+      <button onclick="showScreen('testScreen')" class="flex-1 border border-gray-300 text-gray-700 font-semibold py-3 rounded-lg hover:bg-gray-50 transition">
+        ← Back to Test
+      </button>
+      <button onclick="finalConfirmSubmit()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition">
+        ✅ Confirm & Submit Test
+      </button>
+    </div>
+  </div>
+</section>
+
+<section id="resultScreen" class="screen">
+  <div class="bg-white rounded-2xl shadow-lg p-6 sm:p-10">
+    <div class="text-center mb-8">
+      <h2 class="text-2xl font-bold text-gray-800 mb-1">Test Result</h2>
+      <p class="text-gray-500">Congratulations, <span id="resultStudentName" class="font-semibold text-blue-700"></span>!</p>
+    </div>
+
+    <div class="grid sm:grid-cols-3 gap-4 mb-8">
+      <div class="bg-blue-50 rounded-xl p-5 text-center">
+        <p class="text-4xl font-bold text-blue-700" id="resultScore">0/50</p>
+        <p class="text-sm text-gray-600 mt-1">Total Score</p>
+      </div>
+      <div class="bg-blue-50 rounded-xl p-5 text-center">
+        <p class="text-4xl font-bold text-blue-700" id="resultPercent">0%</p>
+        <p class="text-sm text-gray-600 mt-1">Percentage</p>
+      </div>
+      <div class="bg-blue-50 rounded-xl p-5 text-center">
+        <p class="text-4xl font-bold text-blue-700" id="resultGrade">-</p>
+        <p class="text-sm text-gray-600 mt-1">Grade</p>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-4 gap-3 mb-8">
+      <div class="bg-green-50 rounded-lg p-3 text-center">
+        <p class="text-lg font-bold text-green-700" id="resultCorrect">0</p>
+        <p class="text-xs text-gray-600">Correct</p>
+      </div>
+      <div class="bg-red-50 rounded-lg p-3 text-center">
+        <p class="text-lg font-bold text-red-700" id="resultWrong">0</p>
+        <p class="text-xs text-gray-600">Wrong</p>
+      </div>
+      <div class="bg-gray-100 rounded-lg p-3 text-center">
+        <p class="text-lg font-bold text-gray-600" id="resultUnanswered">0</p>
+        <p class="text-xs text-gray-600">Not Answered</p>
+      </div>
+      <div class="bg-yellow-50 rounded-lg p-3 text-center">
+        <p class="text-lg font-bold text-yellow-700" id="resultNegMarks">-0</p>
+        <p class="text-xs text-gray-600">Negative Marking</p>
+      </div>
+    </div>
+
+    <h3 class="font-semibold text-gray-800 mb-3">Section-wise Breakdown:</h3>
+    <div id="sectionBreakdown" class="space-y-3 mb-8"></div>
+
+
+    <div class="flex flex-col sm:flex-row gap-3">
+      <button onclick="goToCertificate()" id="certBtn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition">
+        🎓 View / Download Certificate
+      </button>
+      <button onclick="resetForNewAttempt()" class="flex-1 border border-gray-300 text-gray-700 font-semibold py-3 rounded-lg hover:bg-gray-50 transition">
+        Back to Home
+      </button>
+    </div>
+    <p id="passNote" class="text-center text-sm text-gray-500 mt-4"></p>
+  </div>
+</section>
+
+<section id="certificateScreen" class="screen">
+  <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-8">
+    <h2 class="text-2xl font-bold text-gray-800 mb-4 text-center">Certificate of Proficiency</h2>
+
+    <div id="certificateArea" class="border-8 border-double border-blue-700 rounded-lg p-6 sm:p-12 bg-gradient-to-br from-blue-50 to-white text-center relative overflow-hidden">
+      <div class="absolute top-4 left-4 text-blue-200 text-6xl font-bold select-none">🎓</div>
+      <p class="text-sm tracking-widest text-blue-600 font-semibold uppercase mb-2">OUR SYSTEM IT SOLUTIONS</p>
+      <h1 class="text-2xl sm:text-4xl font-bold text-gray-800 mb-6">Certificate of Proficiency</h1>
+      <p class="text-gray-600 mb-2">This is to certify that</p>
+      <p id="certName" class="text-2xl sm:text-3xl font-bold text-blue-700 mb-2 border-b-2 border-blue-300 inline-block pb-1 px-4"></p>
+      <p class="text-gray-600 mt-4 mb-1">has successfully completed the</p>
+      <p class="text-lg font-semibold text-gray-800 mb-4">Basic Computer Knowledge Test</p>
+      <p class="text-gray-700 mb-6">with a score of <span id="certScore" class="font-bold text-blue-700"></span> and has been awarded Grade <span id="certGrade" class="font-bold text-blue-700"></span></p>
+
+      <div class="grid sm:grid-cols-3 gap-4 text-sm text-gray-600 mt-8 pt-6 border-t border-blue-200">
+        <div>
+          <p class="font-semibold text-gray-800">Certificate No.</p>
+          <p id="certNumber"></p>
+        </div>
+        <div>
+          <p class="font-semibold text-gray-800">Date Issued</p>
+          <p id="certDate"></p>
+        </div>
+        <div>
+          <p class="font-semibold text-gray-800">Authorized By</p>
+          <p>OUR SYSTEM IT SOLUTIONS</p>
+        </div>
+      </div>
+
+      <div class="flex flex-col items-center mt-6">
+        <div id="certQRCode" class="bg-white p-2 rounded-lg border border-blue-200 inline-block"></div>
+        <p class="text-[11px] text-gray-500 mt-1">Scan to verify this certificate</p>
+      </div>
+
+      <div class="text-xs text-gray-500 mt-6 pt-4 border-t border-blue-100 italic space-y-2 text-left">
+        <p><span class="font-semibold not-italic">Disclaimer:</span> This certificate is issued by OUR SYSTEM IT SOLUTIONS solely to acknowledge the successful completion of the Computer Test conducted by the organization. It is intended only as a record of participation and performance in this assessment.</p>
+        <p>This certificate is not a government-recognized, university-recognized, or professionally accredited qualification and must not be used as proof of educational or professional certification for admissions, employment, licensing, immigration, or any other official purpose.</p>
+      </div>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3 mt-6">
+      <button onclick="downloadCertificatePDF()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition">
+        ⬇ Download Certificate (PDF)
+      </button>
+      <button onclick="resetForNewAttempt()" class="flex-1 border border-gray-300 text-gray-700 font-semibold py-3 rounded-lg hover:bg-gray-50 transition">
+        Back to Home
+      </button>
+    </div>
+  </div>
+</section>
+
+<section id="verifyScreen" class="screen">
+  <div class="max-w-lg mx-auto bg-white rounded-2xl shadow-lg p-6 sm:p-10">
+    <h2 class="text-xl font-bold text-gray-800 mb-1 text-center">Verify Certificate</h2>
+    <p class="text-gray-500 text-sm mb-6 text-center">Enter the Certificate Number printed on the certificate to confirm it was genuinely issued by OUR SYSTEM IT SOLUTIONS.</p>
+
+    <form onsubmit="return handleVerifyCertificate(event)" class="flex gap-2 mb-6">
+      <input type="text" id="verifyCertInput" required placeholder="e.g. OSITS-12345678"
+        class="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 rounded-lg">Verify</button>
+    </form>
+
+    <div id="verifyResultBox" class="hidden"></div>
+
+    <button onclick="showScreen('registrationScreen')" class="w-full text-gray-500 text-sm mt-6">← Back to Home</button>
+  </div>
+</section>
+
+<section id="adminLoginScreen" class="screen">
+  <div class="max-w-md mx-auto bg-white rounded-2xl shadow-lg p-8">
+    <h2 class="text-xl font-bold text-gray-800 mb-4 text-center">Admin Login</h2>
+    <form onsubmit="return handleAdminLogin(event)" class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Admin Email</label>
+        <input type="email" id="adminUser" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input type="password" id="adminPass" class="w-full border border-gray-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+      </div>
+      <p id="adminLoginError" class="hidden text-red-600 text-sm"></p>
+      <button type="submit" id="adminLoginBtn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition">Login</button>
+      <button type="button" onclick="showScreen('registrationScreen')" class="w-full text-gray-500 text-sm mt-2">← Back to Home</button>
+    </form>
+    <p class="text-xs text-gray-400 mt-4 text-center">Sign-in uses Firebase Authentication. Create the admin account in Firebase Console → Authentication → Email/Password.</p>
+  </div>
+</section>
+
+<section id="adminPanelScreen" class="screen">
+  <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-8">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+        Admin Dashboard — All Students
+        <span class="inline-flex items-center gap-1.5 text-xs font-normal text-green-600 bg-green-50 border border-green-200 px-2 py-1 rounded-full">
+          <span class="live-dot"></span> Live
+        </span>
+      </h2>
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="openManageQuestions()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg">🗂 Manage Questions</button>
+        <button onclick="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg">⬇ Export to Excel</button>
+        <button onclick="loadAdminData()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg">↻ Refresh</button>
+        <button onclick="adminLogout()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium px-4 py-2 rounded-lg">Logout</button>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-5 gap-4 mb-6">
+      <div class="bg-blue-50 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-blue-700" id="statTotal">0</p>
+        <p class="text-xs text-gray-600">Total Candidates</p>
+      </div>
+      <div class="bg-green-50 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-green-700" id="statAvg">0%</p>
+        <p class="text-xs text-gray-600">Average Score</p>
+      </div>
+      <div class="bg-yellow-50 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-yellow-700" id="statHighest">0</p>
+        <p class="text-xs text-gray-600">Highest Score</p>
+      </div>
+      <div class="bg-red-50 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-red-700" id="statLowest">0</p>
+        <p class="text-xs text-gray-600">Lowest Score</p>
+      </div>
+      <div class="bg-gray-100 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-gray-600" id="statDisqualified">0</p>
+        <p class="text-xs text-gray-600">Disqualified</p>
+      </div>
+    </div>
+    <p class="text-xs text-gray-400 -mt-4 mb-4">Average / Highest / Lowest exclude disqualified candidates.</p>
+
+    <!-- Grade distribution mini-chart (hand-rolled inline SVG bars, no extra dependency) -->
+    <div id="gradeChartBox" class="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-6">
+      <p class="text-xs font-semibold text-gray-600 mb-2">Grade Distribution</p>
+      <div id="gradeChartSvgWrap" class="w-full overflow-x-auto"></div>
+    </div>
+
+    <!-- Search / filter / sort toolbar -->
+    <div class="flex flex-wrap gap-2 items-center mb-3">
+      <input type="text" id="adminSearchInput" oninput="handleAdminSearch()" placeholder="🔍 Search name, phone, or email..."
+        class="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px] focus:outline-none focus:ring-2 focus:ring-blue-500">
+      <select id="adminGradeFilter" onchange="handleAdminFilterChange()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <option value="all">All Grades</option>
+        <option value="A">Grade A</option>
+        <option value="B">Grade B</option>
+        <option value="C">Grade C</option>
+      </select>
+      <select id="adminStatusFilter" onchange="handleAdminFilterChange()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        <option value="all">All Status</option>
+        <option value="valid">Valid Only</option>
+        <option value="disqualified">Disqualified Only</option>
+      </select>
+    </div>
+
+    <!-- Bulk action bar — appears only when one or more rows are checked -->
+    <div id="bulkActionBar" class="hidden flex flex-wrap items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5 mb-3">
+      <p class="text-sm text-blue-800 font-medium"><span id="bulkSelectedCount">0</span> selected</p>
+      <button onclick="bulkDisqualifySelected(true)" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-yellow-500 text-yellow-700 hover:bg-yellow-50">Disqualify</button>
+      <button onclick="bulkDisqualifySelected(false)" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-green-500 text-green-700 hover:bg-green-50">Requalify</button>
+      <button onclick="bulkDeleteSelected()" class="text-xs font-semibold px-3 py-1.5 rounded-lg border border-red-500 text-red-600 hover:bg-red-50">Delete</button>
+      <button onclick="clearAdminSelection()" class="text-xs font-medium px-3 py-1.5 rounded-lg text-gray-500 hover:bg-gray-100 ml-auto">Clear selection</button>
+    </div>
+
+    <div class="overflow-x-auto">
+      <p class="text-[11px] text-gray-400 mb-1 sm:hidden">↔ Swipe to see more columns</p>
+      <table class="w-full text-sm text-left border-collapse">
+        <thead>
+          <tr class="bg-blue-600 text-white">
+            <th class="p-3 rounded-tl-lg"><input type="checkbox" id="adminSelectAllCheckbox" onchange="toggleSelectAllStudents(this.checked)"></th>
+            <th class="p-3">#</th>
+            <th class="p-3 cursor-pointer select-none" onclick="sortAdminBy('fullName')">Name <span id="sortIcon_fullName"></span></th>
+            <th class="p-3">Father's Name</th>
+            <th class="p-3">Phone</th>
+            <th class="p-3">Email</th>
+            <th class="p-3">DOB</th>
+            <th class="p-3 cursor-pointer select-none" onclick="sortAdminBy('percent')">Score <span id="sortIcon_percent"></span></th>
+            <th class="p-3">Wrong</th>
+            <th class="p-3 cursor-pointer select-none" onclick="sortAdminBy('grade')">Grade <span id="sortIcon_grade"></span></th>
+            <th class="p-3">Time Taken</th>
+            <th class="p-3 cursor-pointer select-none" onclick="sortAdminBy('submittedAt')">Date <span id="sortIcon_submittedAt"></span></th>
+            <th class="p-3">Status</th>
+            <th class="p-3 rounded-tr-lg">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="adminTableBody"></tbody>
+      </table>
+      <p id="adminEmptyMsg" class="text-center text-gray-400 py-8 hidden">No student records found yet.</p>
+    </div>
+    <div id="adminPagination" class="flex items-center justify-between gap-3 mt-4 hidden">
+      <p class="text-xs text-gray-500">Page <span id="adminPageLabel">1</span> (<span id="adminShownCount">0</span> matching)</p>
+      <div class="flex gap-2">
+        <button onclick="adminChangePage(-1)" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-600 hover:bg-gray-50">← Prev</button>
+        <button onclick="adminChangePage(1)" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-600 hover:bg-gray-50">Next →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     SCREEN 9: ADMIN — MANAGE QUESTIONS
+========================================================= -->
+<section id="adminQuestionsScreen" class="screen">
+  <div class="bg-white rounded-2xl shadow-lg p-4 sm:p-8">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
+      <h2 class="text-xl font-bold text-gray-800">Manage Questions</h2>
+      <div class="flex gap-2 flex-wrap">
+        <button onclick="openExcelImportModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg">📥 Import Questions (Excel / PDF)</button>
+        <button onclick="exportQuestionBankToExcel()" class="bg-green-600 hover:bg-green-700 text-white text-sm font-medium px-4 py-2 rounded-lg">⬇ Export Question Bank</button>
+        <button onclick="showScreen('adminPanelScreen')" class="text-sm px-3 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium">← Back to Dashboard</button>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-3 gap-4 mb-6">
+      <div class="bg-blue-50 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-blue-700" id="qmBuiltInCount">0</p>
+        <p class="text-xs text-gray-600">Built-in Questions</p>
+      </div>
+      <div class="bg-green-50 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-green-700" id="qmCustomCount">0</p>
+        <p class="text-xs text-gray-600">Custom (Live) Questions</p>
+      </div>
+      <div class="bg-yellow-50 rounded-xl p-4 text-center">
+        <p class="text-2xl font-bold text-yellow-700" id="qmTotalCount">0</p>
+        <p class="text-xs text-gray-600">Total in Test</p>
+      </div>
+    </div>
+
+    <!-- Add question form -->
+    <div class="bg-gray-50 rounded-xl p-5 mb-8 border border-gray-200">
+      <h3 class="font-semibold text-gray-800 mb-4">Add New Question</h3>
+      <form onsubmit="return handleAddQuestion(event)" class="space-y-4">
+        <div class="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Section</label>
+            <select id="qmSection" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+              <option value="Hardware">Hardware</option>
+              <option value="Software">Software</option>
+              <option value="MS Word">MS Word</option>
+              <option value="MS Excel">MS Excel</option>
+              <option value="PowerPoint">PowerPoint</option>
+              <option value="Internet">Internet</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Correct Option</label>
+            <select id="qmCorrect" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+              <option value="0">Option A</option>
+              <option value="1">Option B</option>
+              <option value="2">Option C</option>
+              <option value="3">Option D</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Question Text</label>
+          <textarea id="qmQuestion" required rows="2" placeholder="e.g. Which of the following is an input device?"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+        </div>
+        <div class="grid sm:grid-cols-2 gap-4">
+          <input type="text" id="qmOptA" required placeholder="Option A" class="border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <input type="text" id="qmOptB" required placeholder="Option B" class="border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <input type="text" id="qmOptC" required placeholder="Option C" class="border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <input type="text" id="qmOptD" required placeholder="Option D" class="border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        </div>
+        <p id="qmFormError" class="hidden text-red-600 text-sm"></p>
+        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-5 py-2.5 rounded-lg transition">+ Add Question</button>
+      </form>
+    </div>
+
+    <!-- List of custom (admin-added) questions -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-1">
+      <h3 class="font-semibold text-gray-800">Custom Questions (added here, live in Firebase)</h3>
+      <input type="text" id="qmSearchInput" oninput="handleQmSearch()" placeholder="🔍 Search custom questions..."
+        class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-blue-500">
+    </div>
+    <p class="text-xs text-gray-400 mb-3">Built-in questions ship with the app's code and can't be deleted from this panel — only questions added here can be removed.</p>
+    <div id="qmCustomList" class="space-y-2"></div>
+    <p id="qmEmptyMsg" class="text-center text-gray-400 py-6 hidden">No custom questions added yet.</p>
+    <div id="qmPagination" class="flex items-center justify-between gap-3 mt-4 hidden">
+      <p class="text-xs text-gray-500">Page <span id="qmPageLabel">1</span></p>
+      <div class="flex gap-2">
+        <button onclick="qmChangePage(-1)" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-600 hover:bg-gray-50">← Prev</button>
+        <button onclick="qmChangePage(1)" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-600 hover:bg-gray-50">Next →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========================================================
+     STUDENT DETAIL MODAL
+========================================================= -->
+<div id="studentDetailModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-6 sm:p-8">
+    <div class="flex justify-between items-start mb-4">
+      <h3 class="text-xl font-bold text-gray-800">Student Full Profile</h3>
+      <button onclick="closeStudentDetail()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+    </div>
+    <div id="studentDetailBody" class="space-y-5 text-sm"></div>
+  </div>
+</div>
+
+<!-- =========================================================
+     UNIFIED QUESTION IMPORT MODAL (Excel + PDF, auto-detected)
+========================================================= -->
+<div id="excelImportModal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-2 sm:p-4">
+  <div class="bg-white rounded-2xl shadow-xl max-w-4xl w-full max-h-[92vh] overflow-y-auto p-4 sm:p-8">
+    <div class="flex justify-between items-start mb-5">
+      <div>
+        <h3 class="text-xl font-bold text-gray-800">Import Questions</h3>
+        <p class="text-xs text-gray-500 mt-0.5">Upload an Excel (.xlsx/.xls) or PDF file. The file type is detected automatically and processed accordingly.</p>
+      </div>
+      <button onclick="closeExcelImportModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+    </div>
+
+    <!-- ---------- STEP 1: UPLOAD ---------- -->
+    <div id="importStepUpload">
+      <div class="flex gap-2 mb-4 flex-wrap">
+        <span class="filetype-tab active" id="ftabExcel">📊 Excel (.xlsx / .xls)</span>
+        <span class="filetype-tab" id="ftabPdf">📄 PDF (text or scanned)</span>
+      </div>
+
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button onclick="downloadSampleTemplate()" class="text-sm px-4 py-2 rounded-lg border border-blue-600 text-blue-600 hover:bg-blue-50 font-medium">⬇ Download Sample Excel Template</button>
+      </div>
+
+      <div id="importDropzone" class="dropzone p-8 sm:p-12 text-center cursor-pointer"
+        onclick="document.getElementById('importFileInput').click()">
+        <p class="text-4xl mb-2">📎</p>
+        <p class="font-semibold text-gray-700">Drag & drop your Excel or PDF file here</p>
+        <p class="text-sm text-gray-500 mt-1">or click to browse — .xlsx / .xls / .pdf, up to 25MB, thousands of questions supported</p>
+        <input type="file" id="importFileInput" accept=".xlsx,.xls,.pdf" class="hidden">
+      </div>
+      <p id="importFileError" class="hidden text-red-600 text-sm mt-3"></p>
+
+      <div class="bg-gray-50 border border-gray-200 rounded-xl p-4 mt-5">
+        <p class="text-sm font-semibold text-gray-700 mb-2">Excel expected column headers (first row):</p>
+        <p class="text-xs text-gray-500 leading-relaxed">Question · Option A · Option B · Option C · Option D · Correct Answer · Category · Difficulty · Marks · Negative Marks · Explanation</p>
+        <p class="text-xs text-gray-400 mt-2">Only <strong>Question, Option A–D, and Correct Answer</strong> are required. Correct Answer accepts A/B/C/D or the exact option text. Category defaults to "General" if left blank.</p>
+        <div class="border-t border-gray-200 mt-3 pt-3">
+          <p class="text-sm font-semibold text-gray-700 mb-1">PDF questions:</p>
+          <p class="text-xs text-gray-500 leading-relaxed">The PDF can be a normal (text-based) document or a scanned/image document — scanned pages are automatically read with OCR. Questions should be numbered ("1.", "Q1.") with options labelled A–D, and an optional "Answer: B" line. Headers, footers and page numbers are detected and ignored automatically. You can edit every extracted question before saving.</p>
+        </div>
+      </div>
+
+      <!-- Sheet selection (shown only for multi-sheet Excel workbooks) -->
+      <div id="importSheetSelect" class="hidden mt-5">
+        <p class="text-sm font-semibold text-gray-700 mb-2">This workbook has multiple sheets — choose which to import:</p>
+        <div id="importSheetList" class="space-y-2"></div>
+        <button onclick="proceedWithSelectedSheets()" class="mt-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-5 py-2.5 rounded-lg">Continue →</button>
+      </div>
+
+      <div id="importParsingIndicator" class="hidden items-center gap-2 text-sm text-gray-500 mt-4">
+        <span class="spinner"></span> <span id="importParsingLabel">Reading and validating rows...</span>
+      </div>
+
+      <!-- PDF extraction progress (per-page text extraction / OCR) -->
+      <div id="pdfExtractionBox" class="hidden mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <p class="text-sm font-semibold text-blue-800">Extracting questions from PDF...</p>
+          <p class="text-xs text-blue-600"><span id="pdfPageProgress">0</span> / <span id="pdfPageTotal">0</span> pages</p>
+        </div>
+        <div class="w-full bg-blue-100 rounded-full h-2 mb-3">
+          <div id="pdfExtractProgressBar" class="import-progress-bar bg-blue-600 h-2 rounded-full" style="width:0%"></div>
+        </div>
+        <div id="pdfPageStatusList" class="max-h-40 overflow-y-auto pr-1"></div>
+        <p id="pdfExtractErrorSummary" class="hidden text-xs text-red-600 mt-2"></p>
+        <button onclick="requestCancelPdfExtraction()" class="mt-3 text-xs text-red-600 hover:underline font-medium">Cancel extraction</button>
+      </div>
+
+      <!-- Recent backups (collapsible) -->
+      <div class="mt-6 border-t pt-4">
+        <button onclick="toggleBackupsList()" class="text-xs font-medium text-gray-500 hover:text-gray-700">🕓 View recent backups (created automatically before each import) ▾</button>
+        <div id="backupsListBox" class="hidden mt-3 space-y-2"></div>
+      </div>
+    </div>
+
+    <!-- ---------- STEP 2: PREVIEW ---------- -->
+    <div id="importStepPreview" class="hidden">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+        <div class="bg-blue-50 rounded-xl p-3 text-center">
+          <p class="text-xl font-bold text-blue-700" id="prevTotal">0</p>
+          <p class="text-xs text-gray-600">Total Rows</p>
+        </div>
+        <div class="bg-green-50 rounded-xl p-3 text-center">
+          <p class="text-xl font-bold text-green-700" id="prevValid">0</p>
+          <p class="text-xs text-gray-600">Valid</p>
+        </div>
+        <div class="bg-yellow-50 rounded-xl p-3 text-center">
+          <p class="text-xl font-bold text-yellow-700" id="prevDuplicate">0</p>
+          <p class="text-xs text-gray-600">Duplicates</p>
+        </div>
+        <div class="bg-red-50 rounded-xl p-3 text-center">
+          <p class="text-xl font-bold text-red-700" id="prevError">0</p>
+          <p class="text-xs text-gray-600">Errors</p>
+        </div>
+      </div>
+
+      <div id="pdfEditHint" class="hidden bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded-lg p-3 mb-4">
+        ✏️ These questions were extracted from a PDF and may need light editing. Click <strong>Edit</strong> on any row to correct the question, options, correct answer, or section before importing.
+      </div>
+
+      <label class="flex items-center gap-2 text-sm text-gray-600 mb-4">
+        <input type="checkbox" id="includeDuplicatesCheckbox" class="rounded" onchange="renderImportPreviewTable()">
+        Include duplicate questions anyway (unchecked = duplicates are skipped automatically)
+      </label>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div class="flex gap-1 flex-wrap">
+          <span class="import-tab active" data-filter="all" onclick="setPreviewFilter('all')">All</span>
+          <span class="import-tab" data-filter="valid" onclick="setPreviewFilter('valid')">Valid</span>
+          <span class="import-tab" data-filter="duplicate" onclick="setPreviewFilter('duplicate')">Duplicates</span>
+          <span class="import-tab" data-filter="error" onclick="setPreviewFilter('error')">Errors</span>
+        </div>
+        <input type="text" id="previewSearchInput" oninput="renderImportPreviewTable()" placeholder="🔍 Search rows..."
+          class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-blue-500">
+      </div>
+
+      <div class="overflow-x-auto border border-gray-200 rounded-xl">
+        <table class="w-full text-xs sm:text-sm text-left border-collapse">
+          <thead>
+            <tr class="bg-gray-100 text-gray-600">
+              <th class="p-2.5">Row</th>
+              <th class="p-2.5">Status</th>
+              <th class="p-2.5">Question</th>
+              <th class="p-2.5">Category</th>
+              <th class="p-2.5">Correct</th>
+              <th class="p-2.5">Details</th>
+              <th class="p-2.5">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="previewTableBody"></tbody>
+        </table>
+      </div>
+      <div class="flex items-center justify-between gap-3 mt-3">
+        <p class="text-xs text-gray-500">Showing page <span id="previewPageLabel">1</span> of <span id="previewPageTotal">1</span> (<span id="previewShownCount">0</span> rows matched)</p>
+        <div class="flex gap-2">
+          <button onclick="previewChangePage(-1)" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-600 hover:bg-gray-50">← Prev</button>
+          <button onclick="previewChangePage(1)" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-600 hover:bg-gray-50">Next →</button>
+        </div>
+      </div>
+
+      <div class="flex flex-col sm:flex-row gap-3 mt-6 pt-5 border-t">
+        <button onclick="cancelImport()" class="flex-1 border border-gray-300 text-gray-700 font-semibold py-3 rounded-lg hover:bg-gray-50 transition">
+          Cancel Import
+        </button>
+        <button onclick="confirmImport()" id="confirmImportBtn" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-lg transition">
+          ✅ Import Valid Questions
+        </button>
+      </div>
+    </div>
+
+    <!-- ---------- STEP 3: IMPORTING (progress) ---------- -->
+    <div id="importStepProgress" class="hidden text-center py-10">
+      <p class="font-semibold text-gray-700 mb-4">Importing questions to the live database...</p>
+      <div class="w-full bg-gray-200 rounded-full h-3 mb-3 max-w-md mx-auto">
+        <div id="importProgressBar" class="import-progress-bar bg-blue-600 h-3 rounded-full" style="width:0%"></div>
+      </div>
+      <p class="text-sm text-gray-500"><span id="importProgressCount">0</span> / <span id="importProgressTotal">0</span> questions saved</p>
+      <button onclick="requestCancelImportWrite()" class="mt-5 text-sm text-red-600 hover:underline font-medium">Cancel remaining import</button>
+    </div>
+
+    <!-- ---------- STEP 4: RESULT SUMMARY ---------- -->
+    <div id="importStepSummary" class="hidden text-center py-6">
+      <p class="text-5xl mb-3">✅</p>
+      <h4 class="text-lg font-bold text-gray-800 mb-4">Import Complete</h4>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-xl mx-auto mb-6">
+        <div class="bg-blue-50 rounded-xl p-3 text-center">
+          <p class="text-xl font-bold text-blue-700" id="sumUploaded">0</p>
+          <p class="text-xs text-gray-600">Total Uploaded</p>
+        </div>
+        <div class="bg-green-50 rounded-xl p-3 text-center">
+          <p class="text-xl font-bold text-green-700" id="sumImported">0</p>
+          <p class="text-xs text-gray-600">Imported</p>
+        </div>
+        <div class="bg-yellow-50 rounded-xl p-3 text-center">
+          <p class="text-xl font-bold text-yellow-700" id="sumSkipped">0</p>
+          <p class="text-xs text-gray-600">Skipped (Dup.)</p>
+        </div>
+        <div class="bg-red-50 rounded-xl p-3 text-center">
+          <p class="text-xl font-bold text-red-700" id="sumFailed">0</p>
+          <p class="text-xs text-gray-600">Failed</p>
+        </div>
+      </div>
+      <button onclick="closeExcelImportModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3 rounded-lg transition">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast notification container -->
+<div id="toastContainer"></div>
+
+</main>
+
+<footer class="text-center text-xs text-gray-400 py-6">
+  © 2026 OUR SYSTEM IT SOLUTIONS — Online Examination System
+</footer>
+
+<!-- =========================================================
+     JAVASCRIPT LOGIC
+========================================================= -->
+<script>
+/* =========================================================
+   1. CONFIGURATION — replace with your own credentials
+========================================================= */
+
+// --- Firebase config: replace with your project's config ---
+const firebaseConfig = {
+  apiKey: "AIzaSyDQDhkzO3Yj-oj01rhyftAw-aizN0_pWxY",
+  authDomain: "oursystem-exam.firebaseapp.com",
+  databaseURL: "https://oursystem-exam-default-rtdb.firebaseio.com",
+  projectId: "oursystem-exam",
+  storageBucket: "oursystem-exam.firebasestorage.app",
+  messagingSenderId: "601931462455",
+  appId: "1:601931462455:web:188c0739e618d5a7850cb2",
+  measurementId: "G-XJLVH9FCTD"
+};
+
+// Initialize Firebase (guarded so the file doesn't crash if config is left as placeholder)
+let db = null;
+let auth = null;
+try {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.database();       // Realtime Database (NOT Firestore)
+  auth = firebase.auth();
+} catch (e) {
+  console.warn("Firebase not configured yet. Data will only be saved locally.", e);
+}
+
+/* Configure pdf.js worker (needed once, lazily — only used when a PDF is imported) */
+if (typeof pdfjsLib !== "undefined") {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+/* ---------------------------------------------------------------
+   ADMIN ACCESS — SECURITY NOTE
+   Admin login uses real Firebase Authentication (Email/Password)
+   instead of a hardcoded password. To create your admin account:
+     1. Firebase Console → Authentication → Sign-in method →
+        enable "Email/Password".
+     2. Firebase Console → Authentication → Users → Add user →
+        enter the admin's email + a strong password.
+   Realtime Database Rules (Firebase Console → Realtime Database →
+   Rules) must look like this for the app to work correctly. This
+   version adds .validate constraints so an anonymous client can still
+   submit their own result (required, since students never log in) but
+   can't write arbitrary shapes, oversized strings, or junk data types —
+   a meaningful hardening step given "examResults".write is open:
+
+   {
+     "rules": {
+       "examResults": {
+         ".read": "auth != null",
+         ".write": true,
+         "$certId": {
+           ".read": true,
+           ".validate": "newData.hasChildren(['fullName','phone','email','score','totalQuestions','certNumber'])",
+           "fullName":       { ".validate": "newData.isString() && newData.val().length <= 80" },
+           "fatherName":     { ".validate": "newData.isString() && newData.val().length <= 80" },
+           "phone":          { ".validate": "newData.isString() && newData.val().length <= 15" },
+           "email":          { ".validate": "newData.isString() && newData.val().length <= 120" },
+           "dob":            { ".validate": "newData.isString() && newData.val().length <= 20" },
+           "score":          { ".validate": "newData.isNumber()" },
+           "totalQuestions": { ".validate": "newData.isNumber()" },
+           "percent":        { ".validate": "newData.isNumber()" },
+           "grade":          { ".validate": "newData.isString() && newData.val().length <= 3" },
+           "certNumber":     { ".validate": "newData.isString() && newData.val().length <= 40" },
+           "answerSheet":    { ".validate": "newData.hasChildren() || !newData.exists()" },
+           "$other":         { ".validate": true }
+         }
+       },
+       "questions": {
+         ".read": true,
+         ".write": "auth != null",
+         "$qid": {
+           ".validate": "newData.hasChildren(['section','question','options','answerIndex'])",
+           "question":    { ".validate": "newData.isString() && newData.val().length <= 2000" },
+           "section":     { ".validate": "newData.isString() && newData.val().length <= 80" },
+           "answerIndex": { ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3" },
+           "options": {
+             ".validate": "newData.hasChildren(['0','1','2','3'])",
+             "$optIdx": { ".validate": "newData.isString() && newData.val().length <= 500" }
+           },
+           "$other": { ".validate": true }
+         }
+       },
+       "questions_backups": {
+         ".read": "auth != null",
+         ".write": "auth != null"
+       }
+     }
+   }
+
+   Explanation:
+   - ".write": true lets students' browsers save their own result
+     after submitting (no login required for that) — the .validate
+     rules above constrain the shape/size of that write instead of
+     leaving it fully open, without requiring a login step students
+     don't have.
+   - "$certId/.read": true lets the PUBLIC verify-certificate page
+     look up ONE certificate by its exact number.
+   - The top-level "examResults/.read": "auth != null" is what
+     actually gates the admin panel's bulk listing — only a signed-in
+     admin can read the whole "examResults" node at once.
+   - "questions/.read": true lets every student's browser load the
+     current question set (including admin-added ones) before they
+     log in — there's no student login step in this app.
+   - "questions/.write": "auth != null" means only a signed-in admin
+     can add, edit, or bulk-import questions from the "Manage
+     Questions" screen (this is also what protects the Excel/PDF
+     bulk-import feature — only an authenticated admin session can
+     trigger those writes).
+   - "questions_backups" stores the automatic pre-import snapshots
+     used by "Restore backup"; it's admin-only for both read and write
+     since it can contain the full question bank.
+------------------------------------------------------------------ */
+
+/* =========================================================
+   2. QUESTION BANK
+========================================================= */
+const questionBank = [
+  // ---------- HARDWARE (sample of 25) ----------
+  { section:"Hardware", question:"Which of the following is an input device?", options:["Monitor","Keyboard","Printer","Speaker"], answerIndex:1 },
+  { section:"Hardware", question:"CPU stands for?", options:["Central Processing Unit","Computer Personal Unit","Central Program Unit","Control Processing Unit"], answerIndex:0 },
+  { section:"Hardware", question:"Which device is used to display output on a screen?", options:["CPU","Monitor","Keyboard","Mouse"], answerIndex:1 },
+  { section:"Hardware", question:"RAM stands for?", options:["Random Access Memory","Read Access Memory","Random Available Memory","Read Available Memory"], answerIndex:0 },
+  { section:"Hardware", question:"Which of these is a storage device?", options:["Hard Disk","Mouse","Monitor","Keyboard"], answerIndex:0 },
+  { section:"Hardware", question:"Which part of the computer is often called its 'brain'?", options:["Monitor","CPU","Keyboard","Printer"], answerIndex:1 },
+  { section:"Hardware", question:"Which device converts a printed document or photo into digital form?", options:["Scanner","Speaker","Projector","Modem"], answerIndex:0 },
+  { section:"Hardware", question:"Which of the following is an output device?", options:["Keyboard","Scanner","Printer","Mouse"], answerIndex:2 },
+  { section:"Hardware", question:"The main circuit board that connects all computer components is called the?", options:["Motherboard","Hard Disk","Power Supply","Cache"], answerIndex:0 },
+  { section:"Hardware", question:"Which device is used to point, click, and select items on the screen?", options:["Mouse","Scanner","Monitor","Speaker"], answerIndex:0 },
+  { section:"Hardware", question:"The speed of a computer processor is commonly measured in?", options:["Megabytes","Gigahertz","Kilobytes","Decibels"], answerIndex:1 },
+  { section:"Hardware", question:"Which of the following is used for wireless internet connectivity?", options:["Wi-Fi adapter","Printer","Scanner","Monitor"], answerIndex:0 },
+  { section:"Hardware", question:"Which of these is a portable secondary storage device?", options:["USB pen drive","Monitor","Keyboard","Mouse"], answerIndex:0 },
+
+  // ---------- SOFTWARE (sample of 25) ----------
+  { section:"Software", question:"Which of the following is an operating system?", options:["MS Word","Windows","Photoshop","Chrome"], answerIndex:1 },
+  { section:"Software", question:"Antivirus software is used to?", options:["Increase speed","Protect from viruses","Print documents","Browse internet"], answerIndex:1 },
+  { section:"Software", question:"Which is an example of system software?", options:["MS Excel","Windows OS","Tally","Google Chrome"], answerIndex:1 },
+  { section:"Software", question:"A compiler is used to?", options:["Convert source code to machine code","Delete files","Format disk","Connect internet"], answerIndex:0 },
+  { section:"Software", question:"Which of these is application software?", options:["Linux","MS Paint","BIOS","Device Driver"], answerIndex:1 },
+  { section:"Software", question:"Which of the following is a word processing software?", options:["MS Excel","MS Word","MS PowerPoint","Windows"], answerIndex:1 },
+  { section:"Software", question:"Firmware is typically stored in which type of memory?", options:["RAM","ROM","Cache","Hard Disk"], answerIndex:1 },
+  { section:"Software", question:"Which software manages computer hardware and provides a platform for running other programs?", options:["Operating System","Antivirus","Compiler","Web Browser"], answerIndex:0 },
+  { section:"Software", question:"'Freeware' refers to software that is?", options:["Available free of cost","Only for developers","Always open-source","Only for businesses"], answerIndex:0 },
+  { section:"Software", question:"A device driver is an example of?", options:["Application software","System software","Hardware","Firmware only"], answerIndex:1 },
+  { section:"Software", question:"Utility software is mainly used to?", options:["Maintain and optimize the computer","Create presentations","Browse websites","Send emails"], answerIndex:0 },
+  { section:"Software", question:"Which of the following is NOT an operating system?", options:["Windows","Linux","macOS","MS Word"], answerIndex:3 },
+
+  // ---------- MS WORD (sample of 10) ----------
+  { section:"MS Word", question:"Which shortcut key is used to bold text in MS Word?", options:["Ctrl+I","Ctrl+B","Ctrl+U","Ctrl+P"], answerIndex:1 },
+  { section:"MS Word", question:"Which tab contains the 'Font' options in MS Word?", options:["Insert","Home","View","Review"], answerIndex:1 },
+  { section:"MS Word", question:"What is the default file extension for a Word document?", options:[".xlsx",".pptx",".docx",".pdf"], answerIndex:2 },
+  { section:"MS Word", question:"Which feature is used to check spelling errors in MS Word?", options:["Spell Check","Find & Replace","Mail Merge","Page Setup"], answerIndex:0 },
+  { section:"MS Word", question:"Which tab is used to change the page orientation in MS Word?", options:["Home","Insert","Layout","Review"], answerIndex:2 },
+
+  // ---------- MS EXCEL (sample of 10) ----------
+  { section:"MS Excel", question:"Which symbol is used to start a formula in Excel?", options:["#","@","=","$"], answerIndex:2 },
+  { section:"MS Excel", question:"Which function is used to add numbers in a range?", options:["AVERAGE()","SUM()","COUNT()","MAX()"], answerIndex:1 },
+  { section:"MS Excel", question:"A single box in an Excel worksheet is called a?", options:["Cell","Field","Table","Column"], answerIndex:0 },
+  { section:"MS Excel", question:"Which key is used to move to the next cell in Excel?", options:["Shift","Tab","Ctrl","Alt"], answerIndex:1 },
+  { section:"MS Excel", question:"Which chart type is best suited for showing trends over time in Excel?", options:["Pie Chart","Line Chart","Bar Chart","Doughnut Chart"], answerIndex:1 },
+
+  // ---------- POWERPOINT (sample of 10) ----------
+  { section:"PowerPoint", question:"Which extension is used to save a PowerPoint file?", options:[".pptx",".docx",".xlsx",".txt"], answerIndex:0 },
+  { section:"PowerPoint", question:"Which view shows one slide at a time in editing mode?", options:["Slide Sorter","Normal View","Reading View","Outline View"], answerIndex:1 },
+  { section:"PowerPoint", question:"What is used to move from one slide to another with an effect?", options:["Animation","Transition","Design","Theme"], answerIndex:1 },
+  { section:"PowerPoint", question:"Which key is used to start a slideshow from the beginning in PowerPoint?", options:["F2","F5","F9","F12"], answerIndex:1 },
+  { section:"PowerPoint", question:"Slide Master is used to?", options:["Apply a consistent design across all slides","Delete a slide","Print the presentation","Add sound effects"], answerIndex:0 },
+
+  // ---------- INTERNET (sample of 20) ----------
+  { section:"Internet", question:"WWW stands for?", options:["World Wide Web","World Wide Wire","Web Wide World","Wide World Web"], answerIndex:0 },
+  { section:"Internet", question:"Which of these is a web browser?", options:["MS Word","Google Chrome","MS Excel","Windows Media Player"], answerIndex:1 },
+  { section:"Internet", question:"An email address must contain which symbol?", options:["#","&","@","%"], answerIndex:2 },
+  { section:"Internet", question:"HTTP stands for?", options:["HyperText Transfer Protocol","High Transfer Text Protocol","HyperText Transmission Process","Hyper Transfer Text Process"], answerIndex:0 },
+  { section:"Internet", question:"URL stands for?", options:["Uniform Resource Locator","United Resource Link","Universal Reference Locator","Uniform Reference Link"], answerIndex:0 },
+  { section:"Internet", question:"Which protocol is commonly used to send email?", options:["FTP","SMTP","HTTP","SSH"], answerIndex:1 },
+  { section:"Internet", question:"The main page of a website is commonly known as the?", options:["Home page","Search page","Login page","Sitemap"], answerIndex:0 },
+  { section:"Internet", question:"Which of the following is a search engine?", options:["Google","MS Word","Windows","Excel"], answerIndex:0 },
+  { section:"Internet", question:"Wi-Fi technology is mainly used for?", options:["Wireless internet connectivity","Printing documents","Storing files","Editing photos"], answerIndex:0 },
+  { section:"Internet", question:"Which characters appear right after 'https:' in a typical web address?", options:["//","::","--","**"], answerIndex:0 }
+];
+
+const SECTION_CONFIG = [
+  { name:"Hardware", total:13 },
+  { name:"Software", total:12 },
+  { name:"MS Word", total:5 },
+  { name:"MS Excel", total:5 },
+  { name:"PowerPoint", total:5 },
+  { name:"Internet", total:10 }
+];
+
+const TOTAL_TIME_SECONDS = 90 * 60; // 90 minutes
+
+// Negative marking: marks deducted for each wrong answer. Set to 0 to disable.
+const NEGATIVE_MARKING_PER_WRONG = 0.25;
+
+/* =========================================================
+   2B. CUSTOM QUESTIONS (admin-added, live in Firebase)
+   These are merged with the built-in questionBank above at
+   runtime. Only questions added via the admin "Manage
+   Questions" screen can be deleted — the built-in bank ships
+   with the code and is not editable from the UI.
+========================================================= */
+let customQuestions = [];          // [{ id, section, question, options, answerIndex }]
+let customQuestionsListenerRef = null;
+
+// The "live" combined bank (built-in + custom), recalculated whenever
+// custom questions change. A test in progress uses a frozen snapshot
+// of this (see state.activeBankSnapshot) so it never shifts mid-test.
+let activeQuestionBank = questionBank.slice();
+
+function recomputeActiveBank() {
+  activeQuestionBank = questionBank.concat(customQuestions);
+}
+
+// Returns the question set the current test/review/scoring should use:
+// the frozen snapshot if a test is in progress or completed, otherwise
+// the latest live combined bank.
+function getActiveBank() {
+  if (state.activeBankSnapshot && state.activeBankSnapshot.length) {
+    return state.activeBankSnapshot;
+  }
+  return activeQuestionBank;
+}
+
+function loadCustomQuestions() {
+  if (!db) return;
+  if (customQuestionsListenerRef) customQuestionsListenerRef.off();
+  customQuestionsListenerRef = db.ref("questions");
+  customQuestionsListenerRef.on("value", (snapshot) => {
+    customQuestions = [];
+    if (snapshot.exists()) {
+      snapshot.forEach(child => {
+        const v = child.val();
+        customQuestions.push({ id: child.key, section: v.section, question: v.question, options: v.options, answerIndex: v.answerIndex });
+      });
+    }
+    recomputeActiveBank();
+    refreshInstructionsCount();
+    if (document.getElementById("adminQuestionsScreen").classList.contains("active")) {
+      renderManageQuestionsScreen();
+    }
+  });
+}
+
+function refreshInstructionsCount() {
+  const total = activeQuestionBank.length;
+  const totalEl = document.getElementById("instrTotalQ");
+  const bulletEl = document.getElementById("instrTotalQBullet");
+  if (totalEl) totalEl.textContent = total;
+  if (bulletEl) bulletEl.textContent = total;
+}
+
+/* =========================================================
+   3. STATE MANAGEMENT (persisted to localStorage)
+========================================================= */
+let state = {
+  student: null,
+  answers: {},
+  marked: {},
+  tabSwitchCount: 0,
+  currentQ: 0,
+  timeLeft: TOTAL_TIME_SECONDS,
+  testStarted: false,
+  testSubmitted: false,
+  result: null,
+  certNumber: null,
+  activeBankSnapshot: null
+};
+
+let timerInterval = null;
+
+function saveState() {
+  localStorage.setItem("examState", JSON.stringify(state));
+}
+function loadState() {
+  const saved = localStorage.getItem("examState");
+  if (saved) {
+    try { state = { ...state, ...JSON.parse(saved) }; } catch(e){ console.warn("Could not parse saved state"); }
+  }
+}
+
+/* =========================================================
+   4. SCREEN NAVIGATION
+========================================================= */
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+  window.scrollTo(0,0);
+}
+
+/* =========================================================
+   5. REGISTRATION
+========================================================= */
+// Timestamp used for a simple bot heuristic: real people take at least a
+// couple of seconds to fill in a form; a submission that arrives near-
+// instantly after the form became visible is a strong bot signal.
+let regFormShownAt = Date.now();
+function resetRegFormTimer() { regFormShownAt = Date.now(); }
+const REG_MIN_FILL_TIME_MS = 2000;
+
+function handleRegistration(e) {
+  e.preventDefault();
+
+  // Honeypot: real users never see or fill this field. If it has a
+  // value, silently treat the submission as spam without tipping off
+  // whatever filled it in.
+  const honeypot = document.getElementById("regWebsite");
+  if (honeypot && honeypot.value.trim() !== "") {
+    console.warn("Registration blocked: honeypot field was filled.");
+    return false;
+  }
+
+  const errBox = document.getElementById("regError");
+
+  if (Date.now() - regFormShownAt < REG_MIN_FILL_TIME_MS) {
+    errBox.textContent = "Please take a moment to review your details before submitting.";
+    errBox.classList.remove("hidden");
+    return false;
+  }
+
+  const fullName = document.getElementById("regFullName").value.trim();
+  const fatherName = document.getElementById("regFatherName").value.trim();
+  const phone = document.getElementById("regPhone").value.trim();
+  const dob = document.getElementById("regDOB").value;
+  const email = document.getElementById("regEmail").value.trim();
+
+  if (!/^[0-9]{10}$/.test(phone)) {
+    errBox.textContent = "Please enter a valid 10-digit phone number.";
+    errBox.classList.remove("hidden");
+    return false;
+  }
+  errBox.classList.add("hidden");
+
+  state.student = { fullName, fatherName, phone, dob, email };
+  saveState();
+
+  document.getElementById("instrStudentName").textContent = fullName;
+  refreshInstructionsCount();
+  showScreen("instructionsScreen");
+  return false;
+}
+
+/* =========================================================
+   6. TEST FLOW
+========================================================= */
+function startTest() {
+  if (!state.testStarted) {
+    state.testStarted = true;
+    state.timeLeft = TOTAL_TIME_SECONDS;
+    state.currentQ = 0;
+    state.answers = {};
+    state.marked = {};
+    state.tabSwitchCount = 0;
+    state.startedAt = new Date().toISOString();
+    // Freeze the question set for this attempt so it can't shift if an
+    // admin adds/removes custom questions while the student is testing.
+    state.activeBankSnapshot = getActiveBank().slice();
+    saveState();
+  }
+  showScreen("testScreen");
+  buildPalette();
+  renderQuestion();
+  startTimer();
+  updateTabSwitchWarning();
+
+  document.addEventListener("contextmenu", disableAction);
+  document.addEventListener("copy", disableAction);
+  document.addEventListener("cut", disableAction);
+  document.addEventListener("paste", disableAction);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+  document.addEventListener("keydown", handleTestKeyboardShortcut);
+}
+function disableAction(e){ e.preventDefault(); return false; }
+
+// Soft "proctoring" signal: counts how many times the student left this
+// tab/window while the test is in progress and shows a visible warning.
+// This can't stop someone determined to cheat, but it does create an
+// honest deterrent and a visible audit trail (nothing is auto-submitted
+// or penalized here — that decision is left to the institute).
+function handleVisibilityChange() {
+  if (document.hidden && state.testStarted && !state.testSubmitted) {
+    state.tabSwitchCount = (state.tabSwitchCount || 0) + 1;
+    saveState();
+    updateTabSwitchWarning();
+  }
+}
+
+function updateTabSwitchWarning() {
+  const box = document.getElementById("tabSwitchWarning");
+  const countEl = document.getElementById("tabSwitchCount");
+  if (!box || !countEl) return;
+  if (state.tabSwitchCount > 0) {
+    countEl.textContent = state.tabSwitchCount;
+    box.classList.remove("hidden");
+  } else {
+    box.classList.add("hidden");
+  }
+}
+
+// Keyboard shortcuts while taking the test: arrow keys to move between
+// questions, 1–4 or A–D to pick an option. Ignored once the test is
+// no longer the active screen, or submitted.
+function handleTestKeyboardShortcut(e) {
+  if (!document.getElementById("testScreen").classList.contains("active")) return;
+  if (state.testSubmitted) return;
+
+  if (e.key === "ArrowRight") { nextQuestion(); return; }
+  if (e.key === "ArrowLeft") { prevQuestion(); return; }
+
+  const numMatch = e.key.match(/^[1-4]$/);
+  const letterMatch = e.key.match(/^[A-Da-d]$/);
+  if (numMatch) {
+    selectAnswer(parseInt(numMatch[0], 10) - 1);
+  } else if (letterMatch) {
+    selectAnswer(letterMatch[0].toUpperCase().charCodeAt(0) - 65);
+  }
+}
+
+function startTimer() {
+  clearInterval(timerInterval);
+  updateTimerDisplay();
+  timerInterval = setInterval(() => {
+    state.timeLeft--;
+    if (state.timeLeft <= 0) {
+      state.timeLeft = 0;
+      updateTimerDisplay();
+      clearInterval(timerInterval);
+      submitTest(true);
+      return;
+    }
+    updateTimerDisplay();
+    saveState();
+  }, 1000);
+}
+
+function updateTimerDisplay() {
+  const m = Math.floor(state.timeLeft / 60).toString().padStart(2,"0");
+  const s = (state.timeLeft % 60).toString().padStart(2,"0");
+  const display = document.getElementById("timerDisplay");
+  display.textContent = `${m}:${s}`;
+  const box = document.getElementById("timerBox");
+  if (state.timeLeft <= 300) {
+    box.classList.add("timer-danger");
+  }
+}
+
+function getEffectiveQuestionCount() {
+  return getActiveBank().length;
+}
+
+function renderQuestion() {
+  const total = getEffectiveQuestionCount();
+  const q = getActiveBank()[state.currentQ];
+  if (!q) return;
+
+  document.getElementById("qProgress").textContent = `${state.currentQ + 1}/${total}`;
+  document.getElementById("qSection").textContent = q.section;
+  document.getElementById("qText").textContent = `${state.currentQ + 1}. ${q.question}`;
+  document.getElementById("progressBar").style.width = `${((state.currentQ + 1) / total) * 100}%`;
+
+  const container = document.getElementById("optionsContainer");
+  container.innerHTML = "";
+  q.options.forEach((opt, idx) => {
+    const selected = state.answers[state.currentQ] === idx;
+    const div = document.createElement("div");
+    div.className = `option-card border-2 rounded-lg px-4 py-3 cursor-pointer flex items-center gap-3 ${selected ? "selected border-blue-600" : "border-gray-200"}`;
+    div.onclick = () => selectAnswer(idx);
+    div.innerHTML = `
+      <span class="w-6 h-6 flex items-center justify-center rounded-full border-2 ${selected ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300 text-gray-400"} text-xs font-bold">${String.fromCharCode(65+idx)}</span>
+      <span class="text-gray-700">${escapeHtml(opt)}</span>
+    `;
+    container.appendChild(div);
+  });
+
+  document.getElementById("prevBtn").disabled = state.currentQ === 0;
+  document.getElementById("prevBtn").classList.toggle("opacity-40", state.currentQ === 0);
+
+  const markBtn = document.getElementById("markReviewBtn");
+  const isMarked = !!state.marked[state.currentQ];
+  markBtn.textContent = isMarked ? "🚩 Marked — Click to Unmark" : "🚩 Mark for Review";
+  markBtn.classList.toggle("bg-purple-100", isMarked);
+
+  if (state.currentQ === total - 1) {
+    document.getElementById("nextBtn").classList.add("hidden");
+    document.getElementById("submitBtn").classList.remove("hidden");
+  } else {
+    document.getElementById("nextBtn").classList.remove("hidden");
+    document.getElementById("submitBtn").classList.add("hidden");
+  }
+
+  updatePaletteHighlight();
+}
+
+function toggleMarkForReview() {
+  if (!state.marked) state.marked = {};
+  state.marked[state.currentQ] = !state.marked[state.currentQ];
+  if (!state.marked[state.currentQ]) delete state.marked[state.currentQ];
+  saveState();
+  renderQuestion();
+}
+
+function selectAnswer(idx) {
+  state.answers[state.currentQ] = idx;
+  saveState();
+  renderQuestion();
+}
+
+function clearAnswer() {
+  delete state.answers[state.currentQ];
+  saveState();
+  renderQuestion();
+}
+
+function nextQuestion() {
+  if (state.currentQ < getEffectiveQuestionCount() - 1) {
+    state.currentQ++;
+    saveState();
+    renderQuestion();
+  }
+}
+function prevQuestion() {
+  if (state.currentQ > 0) {
+    state.currentQ--;
+    saveState();
+    renderQuestion();
+  }
+}
+
+function buildPalette() {
+  const total = getEffectiveQuestionCount();
+  const palette = document.getElementById("questionPalette");
+  palette.innerHTML = "";
+  for (let i = 0; i < total; i++) {
+    const btn = document.createElement("button");
+    btn.textContent = i + 1;
+    btn.dataset.index = i;
+    btn.className = "palette-btn text-xs font-medium rounded-md py-1.5 bg-gray-200 text-gray-600 hover:bg-blue-100";
+    btn.onclick = () => { state.currentQ = i; saveState(); renderQuestion(); };
+    palette.appendChild(btn);
+  }
+}
+
+function updatePaletteHighlight() {
+  document.querySelectorAll(".palette-btn").forEach(btn => {
+    const idx = parseInt(btn.dataset.index);
+    btn.classList.remove("bg-green-500","text-white","bg-blue-600","bg-gray-200","text-gray-600","bg-purple-500");
+    if (idx === state.currentQ) {
+      btn.classList.add("bg-blue-600","text-white");
+    } else if (state.marked && state.marked[idx]) {
+      btn.classList.add("bg-purple-500","text-white");
+    } else if (state.answers[idx] !== undefined) {
+      btn.classList.add("bg-green-500","text-white");
+    } else {
+      btn.classList.add("bg-gray-200","text-gray-600");
+    }
+  });
+}
+
+/* =========================================================
+   6B. REVIEW ANSWERS SCREEN (before final submit)
+========================================================= */
+function goToReview() {
+  renderReview();
+  showScreen("reviewScreen");
+}
+
+function renderReview() {
+  const total = getEffectiveQuestionCount();
+  const answeredCount = Object.keys(state.answers).length;
+  const unansweredCount = total - answeredCount;
+
+  document.getElementById("reviewTotal").textContent = total;
+  document.getElementById("reviewAnswered").textContent = answeredCount;
+  document.getElementById("reviewUnanswered").textContent = unansweredCount;
+  document.getElementById("reviewNegNote").textContent = NEGATIVE_MARKING_PER_WRONG > 0 ? `-${NEGATIVE_MARKING_PER_WRONG}` : "None";
+
+  const list = document.getElementById("reviewList");
+  list.innerHTML = "";
+  getActiveBank().forEach((q, idx) => {
+    const answered = state.answers[idx] !== undefined;
+    const isMarked = !!(state.marked && state.marked[idx]);
+    const row = document.createElement("div");
+    row.className = `flex items-center justify-between gap-3 border rounded-lg px-4 py-3 cursor-pointer hover:bg-gray-50 ${isMarked ? "border-purple-200 bg-purple-50" : answered ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"}`;
+    row.onclick = () => { state.currentQ = idx; saveState(); showScreen("testScreen"); renderQuestion(); };
+    row.innerHTML = `
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-gray-800 truncate">${idx+1}. ${escapeHtml(q.question)}</p>
+        <p class="text-xs text-gray-500 mt-0.5">${escapeHtml(q.section)} — ${answered ? "Your answer: " + escapeHtml(q.options[state.answers[idx]]) : "Not answered"}</p>
+      </div>
+      <span class="shrink-0 flex flex-col items-end gap-1">
+        ${isMarked ? '<span class="text-xs font-semibold px-2 py-1 rounded-full bg-purple-500 text-white">🚩 Marked</span>' : ""}
+        <span class="text-xs font-semibold px-2 py-1 rounded-full ${answered ? "bg-green-500 text-white" : "bg-gray-300 text-gray-600"}">${answered ? "Answered" : "Skip"}</span>
+      </span>
+    `;
+    list.appendChild(row);
+  });
+}
+
+function finalConfirmSubmit() {
+  const total = getEffectiveQuestionCount();
+  const answered = Object.keys(state.answers).length;
+  const unanswered = total - answered;
+  const msg = unanswered > 0
+    ? `You have ${unanswered} unanswered question(s). Are you sure you want to submit the test?`
+    : "Are you sure you want to submit the test?";
+  if (confirm(msg)) {
+    submitTest(false);
+  }
+}
+
+/* =========================================================
+   7. SCORING & RESULT
+========================================================= */
+function submitTest(autoSubmitted) {
+  clearInterval(timerInterval);
+  document.removeEventListener("contextmenu", disableAction);
+  document.removeEventListener("copy", disableAction);
+  document.removeEventListener("cut", disableAction);
+  document.removeEventListener("paste", disableAction);
+  document.removeEventListener("visibilitychange", handleVisibilityChange);
+  document.removeEventListener("keydown", handleTestKeyboardShortcut);
+
+  state.testSubmitted = true;
+
+  const bank = getActiveBank();
+
+  const sectionScores = {};
+  SECTION_CONFIG.forEach(s => sectionScores[s.name] = { correct:0, wrong:0, total:0 });
+
+  let totalCorrect = 0;
+  let totalWrong = 0;
+  bank.forEach((q, idx) => {
+    if (!sectionScores[q.section]) sectionScores[q.section] = { correct:0, wrong:0, total:0 };
+    sectionScores[q.section].total++;
+    const wasAnswered = state.answers[idx] !== undefined;
+    if (wasAnswered && state.answers[idx] === q.answerIndex) {
+      sectionScores[q.section].correct++;
+      totalCorrect++;
+    } else if (wasAnswered) {
+      sectionScores[q.section].wrong++;
+      totalWrong++;
+    }
+  });
+
+  const totalQuestions = bank.length;
+  const totalUnanswered = totalQuestions - totalCorrect - totalWrong;
+  const negativeMarks = Math.round(totalWrong * NEGATIVE_MARKING_PER_WRONG * 100) / 100;
+  const netScore = Math.max(0, Math.round((totalCorrect - negativeMarks) * 100) / 100);
+  const percent = totalQuestions > 0 ? Math.round((netScore / totalQuestions) * 100) : 0;
+  let grade = "C";
+  if (percent >= 80) grade = "A";
+  else if (percent >= 60) grade = "B";
+  else grade = "C";
+
+  const startedMs = state.startedAt ? new Date(state.startedAt).getTime() : Date.now();
+  const secondsUsed = Math.min(TOTAL_TIME_SECONDS, Math.max(0, Math.round((Date.now() - startedMs) / 1000)));
+  const timeTakenLabel = `${Math.floor(secondsUsed/60)}m ${secondsUsed%60}s`;
+
+  const answerSheet = bank.map((q, idx) => ({
+    q: q.question,
+    section: q.section,
+    selected: state.answers[idx] !== undefined ? q.options[state.answers[idx]] : "Not Answered",
+    correct: q.options[q.answerIndex],
+    isCorrect: state.answers[idx] === q.answerIndex
+  }));
+
+  state.result = {
+    totalCorrect,
+    totalWrong,
+    totalUnanswered,
+    negativeMarks,
+    netScore,
+    totalQuestions,
+    percent,
+    grade,
+    sectionScores,
+    autoSubmitted,
+    submittedAt: new Date().toISOString(),
+    timeTakenSeconds: secondsUsed,
+    timeTakenLabel,
+    answerSheet
+  };
+  state.certNumber = "OSITS-" + Date.now().toString().slice(-8);
+  saveState();
+
+  saveResultToFirebase();
+
+  renderResult();
+  showScreen("resultScreen");
+}
+
+function renderResult() {
+  const r = state.result;
+  document.getElementById("resultStudentName").textContent = state.student.fullName;
+  document.getElementById("resultScore").textContent = `${r.netScore}/${r.totalQuestions}`;
+  document.getElementById("resultPercent").textContent = `${r.percent}%`;
+  document.getElementById("resultGrade").textContent = r.grade;
+
+  document.getElementById("resultCorrect").textContent = r.totalCorrect;
+  document.getElementById("resultWrong").textContent = r.totalWrong;
+  document.getElementById("resultUnanswered").textContent = r.totalUnanswered;
+  document.getElementById("resultNegMarks").textContent = r.negativeMarks > 0 ? `-${r.negativeMarks}` : "0";
+
+  const gradeColor = r.grade === "A" ? "text-green-600" : r.grade === "B" ? "text-blue-600" : "text-yellow-600";
+  document.getElementById("resultGrade").className = `text-4xl font-bold ${gradeColor}`;
+
+  const breakdown = document.getElementById("sectionBreakdown");
+  breakdown.innerHTML = "";
+  Object.entries(r.sectionScores).forEach(([section, data]) => {
+    if (data.total === 0) return;
+    const pct = Math.round((data.correct / data.total) * 100);
+    const row = document.createElement("div");
+    row.innerHTML = `
+      <div class="flex justify-between text-sm mb-1">
+        <span class="font-medium text-gray-700">${section}: ${data.correct}/${data.total} correct${data.wrong ? ` <span class="text-red-500">(${data.wrong} wrong)</span>` : ""}</span>
+        <span class="text-gray-500">${pct}%</span>
+      </div>
+      <div class="w-full bg-gray-200 rounded-full h-2">
+        <div class="bg-blue-600 h-2 rounded-full" style="width:${pct}%"></div>
+      </div>
+    `;
+    breakdown.appendChild(row);
+  });
+
+  document.getElementById("passNote").textContent = r.autoSubmitted
+    ? "⚠ Your test was auto-submitted as time expired."
+    : (NEGATIVE_MARKING_PER_WRONG > 0 ? `Note: ${NEGATIVE_MARKING_PER_WRONG} mark(s) deducted per wrong answer.` : "");
+}
+
+/* =========================================================
+   8. REALTIME DATABASE PERSISTENCE
+========================================================= */
+async function saveResultToFirebase() {
+  if (!db) { console.warn("Firebase not configured — skipping cloud save."); return; }
+  try {
+    // certNumber is used as the key so the public verify page can do a
+    // direct child lookup: db.ref("examResults/" + certNumber).
+    await db.ref("examResults/" + state.certNumber).set({
+      fullName: state.student.fullName,
+      fatherName: state.student.fatherName,
+      phone: state.student.phone,
+      dob: state.student.dob,
+      email: state.student.email,
+
+      score: state.result.netScore,
+      rawCorrect: state.result.totalCorrect,
+      wrongCount: state.result.totalWrong,
+      unansweredCount: state.result.totalUnanswered,
+      negativeMarks: state.result.negativeMarks,
+      totalQuestions: state.result.totalQuestions,
+      percent: state.result.percent,
+      grade: state.result.grade,
+      sectionScores: state.result.sectionScores,
+
+      timeTakenSeconds: state.result.timeTakenSeconds,
+      timeTakenLabel: state.result.timeTakenLabel,
+      autoSubmitted: state.result.autoSubmitted,
+      answerSheet: state.result.answerSheet,
+      startedAt: state.startedAt || null,
+
+      certNumber: state.certNumber,
+      submittedAt: state.result.submittedAt,
+      createdAt: firebase.database.ServerValue.TIMESTAMP
+    });
+    console.log("Result saved to Realtime Database.");
+  } catch (e) {
+    console.error("Error saving to Realtime Database:", e);
+  }
+}
+
+/* Public certificate verification lookup.
+   Displays: Certificate ID, Candidate Name, Course/Test Name,
+   Score/Grade, Issue Date, Certificate Status (Valid/Invalid),
+   and Issued By. */
+async function handleVerifyCertificate(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById("verifyCertInput").value.trim().toUpperCase();
+  const box = document.getElementById("verifyResultBox");
+  box.classList.remove("hidden");
+  box.innerHTML = `<p class="text-center text-gray-500 text-sm">Checking...</p>`;
+
+  if (!db) {
+    box.innerHTML = `<div class="bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-lg p-4 text-center">Firebase is not configured yet, so live verification is unavailable. Please contact the institute directly.</div>`;
+    return false;
+  }
+
+  try {
+    const snap = await db.ref("examResults/" + input).once("value");
+    if (!snap.exists()) {
+      box.innerHTML = `
+        <div class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-5 text-center">
+          <p class="font-semibold text-lg">❌ Certificate Not Found or Invalid.</p>
+          <p class="text-sm mt-2 text-red-600">No certificate matches "${escapeHtml(input)}". Please check the number and try again.</p>
+        </div>`;
+      return false;
+    }
+    const d = snap.val();
+    const isValid = !d.disqualified;
+    const issueDateLabel = d.submittedAt ? new Date(d.submittedAt).toLocaleDateString("en-IN", { year:"numeric", month:"long", day:"numeric" }) : "-";
+
+    box.innerHTML = `
+      <div class="${isValid ? "bg-green-50 border-green-300" : "bg-red-50 border-red-300"} border rounded-lg p-5">
+        <p class="${isValid ? "text-green-700" : "text-red-700"} font-semibold text-center mb-4 text-lg">
+          ${isValid ? "✅ Valid Certificate" : "⚠ Invalid — Certificate Disqualified"}
+        </p>
+        <div class="text-sm text-gray-700 space-y-2 divide-y divide-gray-200/70">
+          <p class="pb-2"><span class="font-medium">Certificate ID:</span> ${escapeHtml(d.certNumber)}</p>
+          <p class="pt-2 pb-2"><span class="font-medium">Candidate Name:</span> ${escapeHtml(d.fullName)}</p>
+          <p class="pt-2 pb-2"><span class="font-medium">Course/Test Name:</span> Basic Computer Knowledge Test</p>
+          <p class="pt-2 pb-2"><span class="font-medium">Score/Grade:</span> ${escapeHtml(d.score)}/${escapeHtml(d.totalQuestions)} (${escapeHtml(d.percent)}%) — Grade ${escapeHtml(d.grade)}</p>
+          <p class="pt-2 pb-2"><span class="font-medium">Issue Date:</span> ${issueDateLabel}</p>
+          <p class="pt-2 pb-2"><span class="font-medium">Certificate Status:</span> <span class="${isValid ? "text-green-700 font-semibold" : "text-red-700 font-semibold"}">${isValid ? "Valid" : "Invalid"}</span></p>
+          <p class="pt-2"><span class="font-medium">Issued By:</span> OUR SYSTEM IT SOLUTIONS</p>
+        </div>
+        <p class="text-xs text-gray-500 mt-4 pt-3 border-t ${isValid ? "border-green-200" : "border-red-200"} italic">This certificate acknowledges completion of the Computer Test conducted by OUR SYSTEM IT SOLUTIONS. It is not a government-recognized, university-recognized, or professionally accredited qualification and must not be used for admissions, employment, licensing, immigration, or any other official purpose.</p>
+      </div>`;
+  } catch (err) {
+    console.error("Verification error:", err);
+    box.innerHTML = `<div class="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4 text-center text-sm">Error verifying certificate. Please try again later.</div>`;
+  }
+  return false;
+}
+
+/* =========================================================
+   9. CERTIFICATE GENERATION
+========================================================= */
+
+// Builds the public verification URL for a given Certificate ID. This is
+// the URL a scanned QR code opens: the app itself with a "verify" query
+// param, so scanning jumps straight to that certificate's status page.
+function getCertVerifyURL(certId) {
+  const url = new URL(window.location.href.split("?")[0].split("#")[0]);
+  url.searchParams.set("verify", certId);
+  return url.toString();
+}
+
+// Renders the on-screen QR code into #certQRCode using QRCode.js.
+// Regenerated for every certificate, so it's always unique to that
+// certificate's ID.
+function renderCertQRCode(certId) {
+  const container = document.getElementById("certQRCode");
+  if (!container || typeof QRCode === "undefined") return;
+  container.innerHTML = "";
+  new QRCode(container, {
+    text: getCertVerifyURL(certId),
+    width: 110,
+    height: 110,
+    correctLevel: QRCode.CorrectLevel.M
+  });
+}
+
+// Generates a QR code off-screen and returns it as a PNG data URL,
+// so it can be embedded into the downloaded PDF certificate.
+function getCertQRCodeDataURL(certId, size) {
+  return new Promise((resolve) => {
+    if (typeof QRCode === "undefined") { resolve(null); return; }
+    const temp = document.createElement("div");
+    temp.style.position = "fixed";
+    temp.style.left = "-9999px";
+    temp.style.top = "-9999px";
+    document.body.appendChild(temp);
+    new QRCode(temp, {
+      text: getCertVerifyURL(certId),
+      width: size,
+      height: size,
+      correctLevel: QRCode.CorrectLevel.M
+    });
+    // QRCode.js renders asynchronously into a <canvas>; give it a tick.
+    setTimeout(() => {
+      const canvas = temp.querySelector("canvas");
+      const dataURL = canvas ? canvas.toDataURL("image/png") : null;
+      document.body.removeChild(temp);
+      resolve(dataURL);
+    }, 150);
+  });
+}
+
+function goToCertificate() {
+  const r = state.result;
+  document.getElementById("certName").textContent = state.student.fullName;
+  document.getElementById("certScore").textContent = `${r.netScore}/${r.totalQuestions} (${r.percent}%)`;
+  document.getElementById("certGrade").textContent = r.grade;
+  document.getElementById("certNumber").textContent = state.certNumber;
+  document.getElementById("certDate").textContent = new Date().toLocaleDateString("en-IN", { year:"numeric", month:"long", day:"numeric" });
+  renderCertQRCode(state.certNumber);
+
+  showScreen("certificateScreen");
+}
+
+async function downloadCertificatePDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:"landscape", unit:"pt", format:"a4" });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(6);
+  doc.rect(20, 20, pageWidth-40, pageHeight-40);
+  doc.setLineWidth(1.5);
+  doc.rect(30, 30, pageWidth-60, pageHeight-60);
+
+  doc.setTextColor(37, 99, 235);
+  doc.setFont("times", "bold");
+  doc.setFontSize(16);
+  doc.text("OUR SYSTEM IT SOLUTIONS", pageWidth/2, 90, { align:"center" });
+
+  doc.setTextColor(30, 41, 59);
+  doc.setFontSize(30);
+  doc.text("Certificate of Proficiency", pageWidth/2, 130, { align:"center" });
+
+  doc.setFontSize(13);
+  doc.setFont("times", "normal");
+  doc.text("This is to certify that", pageWidth/2, 175, { align:"center" });
+
+  doc.setFont("times", "bold");
+  doc.setFontSize(24);
+  doc.setTextColor(37, 99, 235);
+  doc.text(state.student.fullName, pageWidth/2, 210, { align:"center" });
+
+  doc.setFont("times", "normal");
+  doc.setFontSize(13);
+  doc.setTextColor(30, 41, 59);
+  doc.text("has successfully completed the Basic Computer Knowledge Test", pageWidth/2, 240, { align:"center" });
+
+  const r = state.result;
+  doc.text(`Score: ${r.netScore}/${r.totalQuestions}  (${r.percent}%)   |   Grade: ${r.grade}`, pageWidth/2, 265, { align:"center" });
+
+  doc.setFont("times", "italic");
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 100, 100);
+  const lineHeight = 11;
+  const disclaimerWidth = pageWidth - 200;
+  const disclaimerPara1 = "Disclaimer: This certificate is issued by OUR SYSTEM IT SOLUTIONS solely to acknowledge the successful completion of the Computer Test conducted by the organization. It is intended only as a record of participation and performance in this assessment.";
+  const disclaimerPara2 = "This certificate is not a government-recognized, university-recognized, or professionally accredited qualification and must not be used as proof of educational or professional certification for admissions, employment, licensing, immigration, or any other official purpose.";
+  const para1Lines = doc.splitTextToSize(disclaimerPara1, disclaimerWidth);
+  const para2Lines = doc.splitTextToSize(disclaimerPara2, disclaimerWidth);
+  let disclaimerY = 285;
+  doc.text(para1Lines, pageWidth/2, disclaimerY, { align:"center" });
+  disclaimerY += para1Lines.length * lineHeight + 3;
+  doc.text(para2Lines, pageWidth/2, disclaimerY, { align:"center" });
+
+  doc.setFontSize(11);
+  doc.setTextColor(30, 41, 59);
+  doc.text(`Certificate No: ${state.certNumber}`, 80, pageHeight-70);
+  doc.text(`Date: ${new Date().toLocaleDateString("en-IN")}`, pageWidth-80, pageHeight-70, { align:"right" });
+  doc.text("Authorized Signatory - OUR SYSTEM IT SOLUTIONS", pageWidth/2, pageHeight-50, { align:"center" });
+
+  // Embed a QR code linking to the public verification page, so anyone
+  // holding a printed certificate can scan it to confirm authenticity.
+  try {
+    const qrSize = 300; // generate large, downscale in PDF for crisp print quality
+    const qrDataURL = await getCertQRCodeDataURL(state.certNumber, qrSize);
+    if (qrDataURL) {
+      const qrDisplaySize = 70; // pt
+      const qrX = pageWidth - 80 - qrDisplaySize;
+      const qrY = pageHeight - 70 - qrDisplaySize - 8;
+      doc.addImage(qrDataURL, "PNG", qrX, qrY, qrDisplaySize, qrDisplaySize);
+      doc.setFontSize(7.5);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Scan to verify", qrX + qrDisplaySize/2, qrY + qrDisplaySize + 10, { align:"center" });
+    }
+  } catch (e) {
+    console.warn("Could not generate QR code for certificate PDF:", e);
+  }
+
+  doc.save(`Certificate_${state.student.fullName.replace(/\s+/g,"_")}.pdf`);
+}
+
+/* =========================================================
+   10. RESET FOR NEW ATTEMPT
+========================================================= */
+function resetForNewAttempt() {
+  localStorage.removeItem("examState");
+  state = {
+    student:null, answers:{}, marked:{}, tabSwitchCount:0, currentQ:0, timeLeft:TOTAL_TIME_SECONDS,
+    testStarted:false, testSubmitted:false, result:null, certNumber:null, activeBankSnapshot:null
+  };
+  recomputeActiveBank();
+  refreshInstructionsCount();
+  document.getElementById("registrationForm").reset();
+  resetRegFormTimer();
+  showScreen("registrationScreen");
+}
+
+/* =========================================================
+   11. ADMIN PANEL (LIVE, via Realtime Database .on() listener)
+========================================================= */
+
+// Client-side brute-force throttle: after several failed attempts in a
+// short window, lock the login form for a cooldown period. This is only
+// a deterrent (a determined attacker can bypass client-side code) — the
+// real protection is Firebase's own rate limiting and strong passwords —
+// but it stops casual automated password guessing from this form.
+const ADMIN_LOGIN_MAX_ATTEMPTS = 5;
+const ADMIN_LOGIN_LOCKOUT_MS = 60 * 1000; // 1 minute
+
+function getAdminLoginThrottleState() {
+  try { return JSON.parse(localStorage.getItem("adminLoginThrottle") || "{}"); }
+  catch (e) { return {}; }
+}
+function setAdminLoginThrottleState(s) {
+  localStorage.setItem("adminLoginThrottle", JSON.stringify(s));
+}
+
+function checkAdminLoginLockout() {
+  const s = getAdminLoginThrottleState();
+  if (s.lockedUntil && Date.now() < s.lockedUntil) {
+    const secsLeft = Math.ceil((s.lockedUntil - Date.now()) / 1000);
+    return `Too many failed attempts. Please try again in ${secsLeft}s.`;
+  }
+  return null;
+}
+
+function registerAdminLoginFailure() {
+  const s = getAdminLoginThrottleState();
+  const now = Date.now();
+  if (!s.firstAttemptAt || now - s.firstAttemptAt > ADMIN_LOGIN_LOCKOUT_MS * 5) {
+    s.firstAttemptAt = now;
+    s.attempts = 0;
+  }
+  s.attempts = (s.attempts || 0) + 1;
+  if (s.attempts >= ADMIN_LOGIN_MAX_ATTEMPTS) {
+    s.lockedUntil = now + ADMIN_LOGIN_LOCKOUT_MS;
+    s.attempts = 0;
+  }
+  setAdminLoginThrottleState(s);
+}
+
+function clearAdminLoginThrottle() {
+  localStorage.removeItem("adminLoginThrottle");
+}
+
+function handleAdminLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById("adminUser").value.trim();
+  const pass = document.getElementById("adminPass").value.trim();
+  const errEl = document.getElementById("adminLoginError");
+  const btn = document.getElementById("adminLoginBtn");
+  errEl.classList.add("hidden");
+
+  const lockoutMsg = checkAdminLoginLockout();
+  if (lockoutMsg) {
+    errEl.textContent = lockoutMsg;
+    errEl.classList.remove("hidden");
+    return false;
+  }
+
+  if (!auth) {
+    errEl.textContent = "Firebase is not configured yet — add your Firebase credentials in the code first.";
+    errEl.classList.remove("hidden");
+    return false;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Signing in...";
+
+  auth.signInWithEmailAndPassword(email, pass)
+    .then(() => {
+      clearAdminLoginThrottle();
+      showScreen("adminPanelScreen");
+      loadAdminData();
+    })
+    .catch((err) => {
+      console.error("Admin login error:", err);
+      registerAdminLoginFailure();
+      const lockedNow = checkAdminLoginLockout();
+      errEl.textContent = lockedNow || "Invalid email or password.";
+      errEl.classList.remove("hidden");
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.textContent = "Login";
+    });
+  return false;
+}
+
+function adminLogout() {
+  detachAdminListener();
+  if (auth) auth.signOut();
+  showScreen("registrationScreen");
+}
+
+let cachedAdminRows = [];
+let adminListenerRef = null; // keeps track of the live .on() listener so we can detach it
+let adminSearchQuery = "";
+let adminGradeFilterVal = "all";
+let adminStatusFilterVal = "all";
+let adminSortField = "submittedAt";
+let adminSortDir = -1; // -1 = desc, 1 = asc
+let adminPage = 1;
+const ADMIN_PAGE_SIZE = 50;
+let selectedStudentIds = new Set();
+
+/* Instead of a one-time .get(), this attaches a live .on("value")
+   listener to the whole examResults node. Any time a student submits
+   a new result anywhere, Firebase pushes the updated data to every
+   open admin panel automatically — no manual refresh needed. Rendering
+   itself is a separate step (renderAdminTable) so search/filter/sort/
+   pagination can re-render instantly without re-fetching from Firebase. */
+function loadAdminData() {
+  const tbody = document.getElementById("adminTableBody");
+  const emptyMsg = document.getElementById("adminEmptyMsg");
+  tbody.innerHTML = `<tr><td colspan="14" class="p-4 text-center text-gray-400">Loading...</td></tr>`;
+
+  if (!db) {
+    tbody.innerHTML = "";
+    emptyMsg.textContent = "Firebase not configured. Please add your Firebase credentials in the script to view live data.";
+    emptyMsg.classList.remove("hidden");
+    updateAdminStats([]);
+    return;
+  }
+
+  detachAdminListener(); // avoid attaching duplicate listeners on repeated logins
+
+  adminListenerRef = db.ref("examResults").orderByChild("createdAt");
+  adminListenerRef.on("value", (snapshot) => {
+    cachedAdminRows = [];
+    selectedStudentIds.clear();
+
+    if (!snapshot.exists()) {
+      updateAdminStats([]);
+      renderAdminTable();
+      return;
+    }
+
+    // Realtime Database returns children in ascending key/index order;
+    // reverse to show most recent submissions first by default.
+    const rows = [];
+    snapshot.forEach(child => {
+      const d = child.val();
+      d._id = child.key;
+      rows.push(d);
+    });
+    rows.reverse();
+    cachedAdminRows = rows;
+
+    updateAdminStats(cachedAdminRows);
+    renderAdminTable();
+  }, (error) => {
+    console.error("Error loading admin data:", error);
+    tbody.innerHTML = `<tr><td colspan="14" class="p-4 text-center text-red-500">Error loading data: ${escapeHtml(error.message)}. Check Realtime Database rules/configuration.</td></tr>`;
+  });
+}
+
+function handleAdminSearch() {
+  adminSearchQuery = document.getElementById("adminSearchInput").value.trim().toLowerCase();
+  adminPage = 1;
+  renderAdminTable();
+}
+
+function handleAdminFilterChange() {
+  adminGradeFilterVal = document.getElementById("adminGradeFilter").value;
+  adminStatusFilterVal = document.getElementById("adminStatusFilter").value;
+  adminPage = 1;
+  renderAdminTable();
+}
+
+function sortAdminBy(field) {
+  if (adminSortField === field) {
+    adminSortDir = -adminSortDir;
+  } else {
+    adminSortField = field;
+    adminSortDir = -1;
+  }
+  renderAdminTable();
+}
+
+function adminChangePage(delta) {
+  adminPage = Math.max(1, adminPage + delta);
+  renderAdminTable();
+}
+
+function getFilteredSortedAdminRows() {
+  let rows = cachedAdminRows.slice();
+
+  if (adminSearchQuery) {
+    rows = rows.filter(d =>
+      (d.fullName || "").toLowerCase().includes(adminSearchQuery) ||
+      (d.phone || "").toLowerCase().includes(adminSearchQuery) ||
+      (d.email || "").toLowerCase().includes(adminSearchQuery)
+    );
+  }
+  if (adminGradeFilterVal !== "all") {
+    rows = rows.filter(d => d.grade === adminGradeFilterVal);
+  }
+  if (adminStatusFilterVal === "valid") rows = rows.filter(d => !d.disqualified);
+  else if (adminStatusFilterVal === "disqualified") rows = rows.filter(d => !!d.disqualified);
+
+  rows.sort((a, b) => {
+    let av = a[adminSortField], bv = b[adminSortField];
+    if (adminSortField === "fullName" || adminSortField === "grade") {
+      av = (av || "").toString().toLowerCase();
+      bv = (bv || "").toString().toLowerCase();
+      return av < bv ? -1 * adminSortDir : av > bv ? 1 * adminSortDir : 0;
+    }
+    av = av ?? 0; bv = bv ?? 0;
+    return (av - bv) * adminSortDir;
+  });
+
+  return rows;
+}
+
+function renderAdminTable() {
+  const tbody = document.getElementById("adminTableBody");
+  const emptyMsg = document.getElementById("adminEmptyMsg");
+  const pagination = document.getElementById("adminPagination");
+
+  ["fullName", "percent", "grade", "submittedAt"].forEach(f => {
+    const el = document.getElementById(`sortIcon_${f}`);
+    if (el) el.textContent = adminSortField === f ? (adminSortDir === 1 ? "▲" : "▼") : "";
+  });
+
+  const filtered = getFilteredSortedAdminRows();
+
+  if (!cachedAdminRows.length) {
+    tbody.innerHTML = "";
+    emptyMsg.textContent = "No student records found yet.";
+    emptyMsg.classList.remove("hidden");
+    pagination.classList.add("hidden");
+    updateBulkActionBar();
+    return;
+  }
+  if (!filtered.length) {
+    tbody.innerHTML = "";
+    emptyMsg.textContent = "No students match your search/filters.";
+    emptyMsg.classList.remove("hidden");
+    pagination.classList.add("hidden");
+    updateBulkActionBar();
+    return;
+  }
+  emptyMsg.classList.add("hidden");
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ADMIN_PAGE_SIZE));
+  adminPage = Math.min(adminPage, totalPages);
+  const pageRows = filtered.slice((adminPage - 1) * ADMIN_PAGE_SIZE, adminPage * ADMIN_PAGE_SIZE);
+
+  tbody.innerHTML = pageRows.map((d, i) => {
+    const isDQ = !!d.disqualified;
+    const rowClass = (isDQ ? "bg-red-50" : (i % 2 === 0 ? "bg-gray-50" : "bg-white")) + (isDQ ? " opacity-80" : "");
+    const checked = selectedStudentIds.has(d._id) ? "checked" : "";
+    return `
+      <tr class="${rowClass}">
+        <td class="p-3"><input type="checkbox" class="admin-row-checkbox" data-id="${escapeHtml(d._id)}" onchange="toggleSelectStudent('${escapeHtml(d._id)}', this.checked)" ${checked}></td>
+        <td class="p-3">${(adminPage - 1) * ADMIN_PAGE_SIZE + i + 1}</td>
+        <td class="p-3 font-medium ${isDQ ? 'line-through text-gray-500' : ''}">${escapeHtml(d.fullName) || "-"}</td>
+        <td class="p-3">${escapeHtml(d.fatherName) || "-"}</td>
+        <td class="p-3">${escapeHtml(d.phone) || "-"}</td>
+        <td class="p-3">${escapeHtml(d.email) || "-"}</td>
+        <td class="p-3">${escapeHtml(d.dob) || "-"}</td>
+        <td class="p-3">${escapeHtml(d.score) ?? "-"}/${escapeHtml(d.totalQuestions) ?? "-"}</td>
+        <td class="p-3 text-red-600">${escapeHtml(d.wrongCount) ?? 0}</td>
+        <td class="p-3 font-semibold ${d.grade === 'A' ? 'text-green-600' : d.grade === 'B' ? 'text-blue-600' : 'text-yellow-600'}">${escapeHtml(d.grade) || "-"}</td>
+        <td class="p-3">${escapeHtml(d.timeTakenLabel) || "-"}${d.autoSubmitted ? ' <span class="text-red-500 text-xs">(auto)</span>' : ''}</td>
+        <td class="p-3">${d.submittedAt ? new Date(d.submittedAt).toLocaleDateString("en-IN") : "-"}</td>
+        <td class="p-3">${isDQ
+          ? `<span class="text-xs font-semibold text-red-600 bg-red-100 px-2 py-1 rounded-full">Disqualified</span>`
+          : `<span class="text-xs font-semibold text-green-600 bg-green-100 px-2 py-1 rounded-full">Valid</span>`}</td>
+        <td class="p-3 whitespace-nowrap">
+          <button onclick="openStudentDetail('${escapeHtml(d._id)}')" class="text-blue-600 hover:underline font-medium text-xs mr-2">View</button>
+          <button onclick="toggleDisqualify('${escapeHtml(d._id)}', ${!isDQ})" class="text-yellow-700 hover:underline font-medium text-xs mr-2">${isDQ ? "Requalify" : "Disqualify"}</button>
+          <button onclick="deleteStudentResult('${escapeHtml(d._id)}')" class="text-red-600 hover:underline font-medium text-xs">Delete</button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+
+  if (filtered.length > ADMIN_PAGE_SIZE) {
+    pagination.classList.remove("hidden");
+    document.getElementById("adminPageLabel").textContent = `${adminPage} of ${totalPages}`;
+    document.getElementById("adminShownCount").textContent = filtered.length;
+  } else {
+    pagination.classList.add("hidden");
+  }
+
+  const selectAllBox = document.getElementById("adminSelectAllCheckbox");
+  if (selectAllBox) selectAllBox.checked = pageRows.length > 0 && pageRows.every(d => selectedStudentIds.has(d._id));
+
+  updateBulkActionBar();
+}
+
+/* ---------- Bulk selection & bulk actions ---------- */
+function toggleSelectStudent(id, checked) {
+  if (checked) selectedStudentIds.add(id); else selectedStudentIds.delete(id);
+  updateBulkActionBar();
+  const selectAllBox = document.getElementById("adminSelectAllCheckbox");
+  if (selectAllBox && !checked) selectAllBox.checked = false;
+}
+
+function toggleSelectAllStudents(checked) {
+  document.querySelectorAll(".admin-row-checkbox").forEach(cb => {
+    cb.checked = checked;
+    const id = cb.dataset.id;
+    if (checked) selectedStudentIds.add(id); else selectedStudentIds.delete(id);
+  });
+  updateBulkActionBar();
+}
+
+function clearAdminSelection() {
+  selectedStudentIds.clear();
+  renderAdminTable();
+}
+
+function updateBulkActionBar() {
+  const bar = document.getElementById("bulkActionBar");
+  const countEl = document.getElementById("bulkSelectedCount");
+  if (!bar || !countEl) return;
+  countEl.textContent = selectedStudentIds.size;
+  bar.classList.toggle("hidden", selectedStudentIds.size === 0);
+}
+
+async function bulkDisqualifySelected(shouldDisqualify) {
+  if (!db || !selectedStudentIds.size) return;
+  const verb = shouldDisqualify ? "DISQUALIFY" : "requalify";
+  if (!confirm(`${verb === "requalify" ? "Requalify" : "Disqualify"} ${selectedStudentIds.size} selected student(s)?`)) return;
+
+  const updates = {};
+  selectedStudentIds.forEach(id => {
+    updates[`${id}/disqualified`] = shouldDisqualify;
+    updates[`${id}/disqualifiedAt`] = shouldDisqualify ? new Date().toISOString() : null;
+  });
+  try {
+    await db.ref("examResults").update(updates);
+    showToast(`${selectedStudentIds.size} record(s) updated.`, "success");
+    selectedStudentIds.clear();
+  } catch (e) {
+    console.error("Bulk disqualify error:", e);
+    showToast("Could not update the selected records.", "error");
+  }
+}
+
+async function bulkDeleteSelected() {
+  if (!db || !selectedStudentIds.size) return;
+  const typed = prompt(`This will PERMANENTLY delete ${selectedStudentIds.size} student result(s). This cannot be undone.\n\nType DELETE to confirm.`);
+  if (typed !== "DELETE") {
+    if (typed !== null) alert("Deletion cancelled — text did not match.");
+    return;
+  }
+  const updates = {};
+  selectedStudentIds.forEach(id => { updates[id] = null; });
+  try {
+    await db.ref("examResults").update(updates);
+    showToast(`${selectedStudentIds.size} record(s) deleted.`, "success");
+    selectedStudentIds.clear();
+  } catch (e) {
+    console.error("Bulk delete error:", e);
+    showToast("Could not delete the selected records.", "error");
+  }
+}
+
+/* ---------- Grade distribution chart (hand-rolled SVG, no chart library needed) ---------- */
+function renderGradeChart(rows) {
+  const wrap = document.getElementById("gradeChartSvgWrap");
+  if (!wrap) return;
+  const validRows = rows.filter(r => !r.disqualified);
+  const counts = { A: 0, B: 0, C: 0 };
+  validRows.forEach(r => { if (counts[r.grade] !== undefined) counts[r.grade]++; });
+  const max = Math.max(1, counts.A, counts.B, counts.C);
+  const colors = { A: "#16a34a", B: "#2563EB", C: "#CA8A04" };
+  const barWidth = 70, gap = 40, chartHeight = 120, labelHeight = 30;
+  const svgWidth = 3 * barWidth + 4 * gap;
+
+  const bars = ["A", "B", "C"].map((g, i) => {
+    const h = Math.round((counts[g] / max) * chartHeight);
+    const x = gap + i * (barWidth + gap);
+    const y = chartHeight - h;
+    return `
+      <text x="${x + barWidth/2}" y="${chartHeight - h - 8}" text-anchor="middle" font-size="13" font-weight="700" fill="${colors[g]}">${counts[g]}</text>
+      <rect x="${x}" y="${y}" width="${barWidth}" height="${h}" rx="6" fill="${colors[g]}" opacity="0.85"/>
+      <text x="${x + barWidth/2}" y="${chartHeight + 20}" text-anchor="middle" font-size="13" font-weight="600" fill="#374151">Grade ${g}</text>
+    `;
+  }).join("");
+
+  wrap.innerHTML = `<svg viewBox="0 0 ${svgWidth} ${chartHeight + labelHeight}" width="${svgWidth}" height="${chartHeight + labelHeight}" style="max-width:100%">
+    <line x1="0" y1="${chartHeight}" x2="${svgWidth}" y2="${chartHeight}" stroke="#E5E7EB" stroke-width="1"/>
+    ${bars}
+  </svg>`;
+}
+
+function detachAdminListener() {
+  if (adminListenerRef) {
+    adminListenerRef.off();
+    adminListenerRef = null;
+  }
+}
+
+function openStudentDetail(certId) {
+  const d = cachedAdminRows.find(r => r._id === certId);
+  if (!d) return;
+
+  const body = document.getElementById("studentDetailBody");
+
+  const sectionRows = Object.entries(d.sectionScores || {}).map(([sec, sc]) => {
+    const pct = sc.total ? Math.round((sc.correct/sc.total)*100) : 0;
+    return `<div class="flex justify-between text-sm border-b py-1">
+      <span>${escapeHtml(sec)}</span><span class="font-medium">${escapeHtml(sc.correct)}/${escapeHtml(sc.total)} (${pct}%)</span>
+    </div>`;
+  }).join("");
+
+  const answerRows = (d.answerSheet || []).map((a, idx) => `
+    <div class="border rounded-lg p-3 ${a.isCorrect ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}">
+      <p class="font-medium text-gray-800">${idx+1}. ${escapeHtml(a.q)}</p>
+      <p class="text-xs text-gray-500 mt-1">Section: ${escapeHtml(a.section)}</p>
+      <p class="text-sm mt-1">Selected: <span class="font-medium">${escapeHtml(a.selected)}</span></p>
+      ${!a.isCorrect ? `<p class="text-sm">Correct Answer: <span class="font-medium">${escapeHtml(a.correct)}</span></p>` : ""}
+    </div>
+  `).join("");
+
+  body.innerHTML = `
+    <div class="flex flex-wrap items-center justify-between gap-2 -mt-1">
+      ${d.disqualified
+        ? `<span class="text-xs font-semibold text-red-600 bg-red-100 px-3 py-1.5 rounded-full">⚠ Disqualified</span>`
+        : `<span class="text-xs font-semibold text-green-600 bg-green-100 px-3 py-1.5 rounded-full">✓ Valid Result</span>`}
+      <div class="flex gap-2">
+        <button onclick="toggleDisqualify('${escapeHtml(d._id)}', ${!d.disqualified})" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-yellow-500 text-yellow-700 hover:bg-yellow-50">${d.disqualified ? "Requalify" : "Disqualify"}</button>
+        <button onclick="deleteStudentResult('${escapeHtml(d._id)}')" class="text-xs font-medium px-3 py-1.5 rounded-lg border border-red-500 text-red-600 hover:bg-red-50">Delete Result</button>
+      </div>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-3 bg-gray-50 rounded-lg p-4">
+      <p><span class="font-semibold text-gray-700">Full Name:</span> ${escapeHtml(d.fullName) || "-"}</p>
+      <p><span class="font-semibold text-gray-700">Father's Name:</span> ${escapeHtml(d.fatherName) || "-"}</p>
+      <p><span class="font-semibold text-gray-700">Phone:</span> ${escapeHtml(d.phone) || "-"}</p>
+      <p><span class="font-semibold text-gray-700">Email:</span> ${escapeHtml(d.email) || "-"}</p>
+      <p><span class="font-semibold text-gray-700">Date of Birth:</span> ${escapeHtml(d.dob) || "-"}</p>
+      <p><span class="font-semibold text-gray-700">Certificate No:</span> ${escapeHtml(d.certNumber) || escapeHtml(d._id)}</p>
+    </div>
+
+    <div class="grid sm:grid-cols-3 gap-3">
+      <div class="bg-blue-50 rounded-lg p-3 text-center">
+        <p class="text-xl font-bold text-blue-700">${escapeHtml(d.score)}/${escapeHtml(d.totalQuestions)}</p>
+        <p class="text-xs text-gray-600">Net Score (${escapeHtml(d.percent)}%)</p>
+      </div>
+      <div class="bg-blue-50 rounded-lg p-3 text-center">
+        <p class="text-xl font-bold text-blue-700">${escapeHtml(d.grade)}</p>
+        <p class="text-xs text-gray-600">Grade</p>
+      </div>
+      <div class="bg-blue-50 rounded-lg p-3 text-center">
+        <p class="text-xl font-bold text-blue-700">${escapeHtml(d.timeTakenLabel) || "-"}</p>
+        <p class="text-xs text-gray-600">Time Taken ${d.autoSubmitted ? "(auto-submitted)" : ""}</p>
+      </div>
+      <div class="bg-green-50 rounded-lg p-3 text-center">
+        <p class="text-xl font-bold text-green-700">${escapeHtml(d.rawCorrect) ?? "-"}</p>
+        <p class="text-xs text-gray-600">Correct</p>
+      </div>
+      <div class="bg-red-50 rounded-lg p-3 text-center">
+        <p class="text-xl font-bold text-red-700">${escapeHtml(d.wrongCount) ?? 0}</p>
+        <p class="text-xs text-gray-600">Wrong (-${escapeHtml(d.negativeMarks) ?? 0})</p>
+      </div>
+      <div class="bg-gray-100 rounded-lg p-3 text-center">
+        <p class="text-xl font-bold text-gray-600">${escapeHtml(d.unansweredCount) ?? 0}</p>
+        <p class="text-xs text-gray-600">Not Answered</p>
+      </div>
+    </div>
+
+    <div>
+      <h4 class="font-semibold text-gray-800 mb-2">Section-wise Breakdown</h4>
+      ${sectionRows || '<p class="text-gray-400 text-sm">No section data.</p>'}
+    </div>
+
+    <div>
+      <h4 class="font-semibold text-gray-800 mb-2">Full Answer Sheet (${(d.answerSheet||[]).length} questions)</h4>
+      <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+        ${answerRows || '<p class="text-gray-400 text-sm">No answer data recorded.</p>'}
+      </div>
+    </div>
+  `;
+
+  document.getElementById("studentDetailModal").classList.remove("hidden");
+}
+
+function closeStudentDetail() {
+  document.getElementById("studentDetailModal").classList.add("hidden");
+}
+
+/* Mark a result as disqualified (or restore it) without deleting the data.
+   Disqualified results are excluded from average/highest/lowest stats and
+   are visually flagged in the table, but remain in the database for audit. */
+async function toggleDisqualify(certId, shouldDisqualify) {
+  if (!db) { alert("Firebase is not configured — cannot update record."); return; }
+  const confirmMsg = shouldDisqualify
+    ? "Mark this student's result as DISQUALIFIED? It will be excluded from average/highest/lowest stats and flagged in the table."
+    : "Restore (requalify) this student's result?";
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    await db.ref("examResults/" + certId).update({
+      disqualified: shouldDisqualify,
+      disqualifiedAt: shouldDisqualify ? new Date().toISOString() : null
+    });
+    closeStudentDetail();
+    // The live .on("value") listener attached in loadAdminData will
+    // automatically refresh the table once Firebase pushes the update.
+  } catch (e) {
+    console.error("Error updating disqualification status:", e);
+    alert("Could not update the record. Please try again.");
+  }
+}
+
+/* Permanently deletes a student's result from Realtime Database.
+   This cannot be undone, so it requires typing a confirmation. */
+async function deleteStudentResult(certId) {
+  if (!db) { alert("Firebase is not configured — cannot delete record."); return; }
+  const d = cachedAdminRows.find(r => r._id === certId);
+  const name = d ? d.fullName : certId;
+
+  const typed = prompt(`This will PERMANENTLY delete ${name}'s result (Certificate No: ${certId}). This cannot be undone.\n\nType DELETE to confirm.`);
+  if (typed !== "DELETE") {
+    if (typed !== null) alert("Deletion cancelled — text did not match.");
+    return;
+  }
+
+  try {
+    await db.ref("examResults/" + certId).remove();
+    closeStudentDetail();
+  } catch (e) {
+    console.error("Error deleting record:", e);
+    alert("Could not delete the record. Please try again.");
+  }
+}
+
+function updateAdminStats(rows) {
+  document.getElementById("statTotal").textContent = rows.length;
+  const disqualifiedCount = rows.filter(r => r.disqualified).length;
+  document.getElementById("statDisqualified").textContent = disqualifiedCount;
+
+  renderGradeChart(rows);
+
+  const validRows = rows.filter(r => !r.disqualified);
+  if (validRows.length === 0) {
+    document.getElementById("statAvg").textContent = "0%";
+    document.getElementById("statHighest").textContent = "0";
+    document.getElementById("statLowest").textContent = "0";
+    return;
+  }
+  const percents = validRows.map(r => r.percent || 0);
+  const avg = Math.round(percents.reduce((a,b)=>a+b,0) / percents.length);
+  document.getElementById("statAvg").textContent = `${avg}%`;
+  document.getElementById("statHighest").textContent = Math.max(...validRows.map(r=>r.score||0));
+  document.getElementById("statLowest").textContent = Math.min(...validRows.map(r=>r.score||0));
+}
+
+function exportToExcel() {
+  if (!cachedAdminRows.length) {
+    alert("No data available to export.");
+    return;
+  }
+  const exportData = cachedAdminRows.map((d, i) => {
+    const row = {
+      "S.No": i+1,
+      "Full Name": d.fullName,
+      "Father's Name": d.fatherName,
+      "Phone": d.phone,
+      "Email": d.email,
+      "DOB": d.dob,
+      "Net Score": `${d.score}/${d.totalQuestions}`,
+      "Correct": d.rawCorrect ?? "",
+      "Wrong": d.wrongCount ?? 0,
+      "Not Answered": d.unansweredCount ?? 0,
+      "Negative Marks": d.negativeMarks ?? 0,
+      "Percentage": `${d.percent}%`,
+      "Grade": d.grade,
+      "Time Taken": d.timeTakenLabel || "",
+      "Auto-Submitted": d.autoSubmitted ? "Yes" : "No",
+      "Certificate No": d.certNumber,
+      "Status": d.disqualified ? "Disqualified" : "Valid",
+      "Submitted At": d.submittedAt ? new Date(d.submittedAt).toLocaleString("en-IN") : ""
+    };
+    Object.entries(d.sectionScores || {}).forEach(([sec, sc]) => {
+      row[sec] = `${sc.correct}/${sc.total} (${sc.wrong || 0}W)`;
+    });
+    return row;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Exam Results");
+  XLSX.writeFile(wb, `OUR_SYSTEM_IT_SOLUTIONS_Results_${Date.now()}.xlsx`);
+}
+
+/* =========================================================
+   11B. ADMIN — MANAGE QUESTIONS (add / delete, live in Firebase)
+========================================================= */
+function openManageQuestions() {
+  showScreen("adminQuestionsScreen");
+  renderManageQuestionsScreen();
+}
+
+let qmSearchQuery = "";
+let qmPage = 1;
+const QM_PAGE_SIZE = 50;
+
+function handleQmSearch() {
+  qmSearchQuery = document.getElementById("qmSearchInput").value.trim().toLowerCase();
+  qmPage = 1;
+  renderManageQuestionsScreen();
+}
+
+function qmChangePage(delta) {
+  qmPage = Math.max(1, qmPage + delta);
+  renderManageQuestionsScreen();
+}
+
+function renderManageQuestionsScreen() {
+  document.getElementById("qmBuiltInCount").textContent = questionBank.length;
+  document.getElementById("qmCustomCount").textContent = customQuestions.length;
+  document.getElementById("qmTotalCount").textContent = questionBank.length + customQuestions.length;
+
+  const list = document.getElementById("qmCustomList");
+  const emptyMsg = document.getElementById("qmEmptyMsg");
+  const pagination = document.getElementById("qmPagination");
+  list.innerHTML = "";
+
+  if (!db) {
+    emptyMsg.textContent = "Firebase is not configured, so questions can't be managed live yet.";
+    emptyMsg.classList.remove("hidden");
+    pagination.classList.add("hidden");
+    return;
+  }
+
+  if (customQuestions.length === 0) {
+    emptyMsg.textContent = "No custom questions added yet.";
+    emptyMsg.classList.remove("hidden");
+    pagination.classList.add("hidden");
+    return;
+  }
+
+  let filtered = customQuestions;
+  if (qmSearchQuery) {
+    filtered = filtered.filter(q =>
+      q.question.toLowerCase().includes(qmSearchQuery) ||
+      (q.section || "").toLowerCase().includes(qmSearchQuery)
+    );
+  }
+
+  if (filtered.length === 0) {
+    emptyMsg.textContent = "No questions match your search.";
+    emptyMsg.classList.remove("hidden");
+    pagination.classList.add("hidden");
+    return;
+  }
+  emptyMsg.classList.add("hidden");
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / QM_PAGE_SIZE));
+  qmPage = Math.min(qmPage, totalPages);
+  const pageItems = filtered.slice((qmPage - 1) * QM_PAGE_SIZE, qmPage * QM_PAGE_SIZE);
+
+  pageItems.forEach((q, i) => {
+    const idx = (qmPage - 1) * QM_PAGE_SIZE + i;
+    const row = document.createElement("div");
+    row.className = "border border-gray-200 rounded-lg p-3 flex items-start justify-between gap-3";
+    row.innerHTML = `
+      <div class="min-w-0">
+        <p class="text-xs font-semibold text-blue-700 bg-blue-50 inline-block px-2 py-0.5 rounded mb-1">${escapeHtml(q.section)}</p>
+        <p class="text-sm font-medium text-gray-800">${idx+1}. ${escapeHtml(q.question)}</p>
+        <p class="text-xs text-gray-500 mt-1">Options: ${q.options.map((o, i2) => `${String.fromCharCode(65+i2)}) ${escapeHtml(o)}`).join("  ")} — Correct: ${String.fromCharCode(65+q.answerIndex)}</p>
+      </div>
+      <button onclick="deleteCustomQuestion('${q.id}')" class="shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg border border-red-500 text-red-600 hover:bg-red-50">Delete</button>
+    `;
+    list.appendChild(row);
+  });
+
+  if (filtered.length > QM_PAGE_SIZE) {
+    pagination.classList.remove("hidden");
+    document.getElementById("qmPageLabel").textContent = `${qmPage} of ${totalPages}`;
+  } else {
+    pagination.classList.add("hidden");
+  }
+}
+
+function handleAddQuestion(e) {
+  e.preventDefault();
+  const errBox = document.getElementById("qmFormError");
+  errBox.classList.add("hidden");
+
+  if (!db) {
+    errBox.textContent = "Firebase is not configured — questions can't be saved live yet.";
+    errBox.classList.remove("hidden");
+    return false;
+  }
+
+  const section = document.getElementById("qmSection").value;
+  const question = document.getElementById("qmQuestion").value.trim();
+  const optA = document.getElementById("qmOptA").value.trim();
+  const optB = document.getElementById("qmOptB").value.trim();
+  const optC = document.getElementById("qmOptC").value.trim();
+  const optD = document.getElementById("qmOptD").value.trim();
+  const answerIndex = parseInt(document.getElementById("qmCorrect").value, 10);
+
+  if (!question || !optA || !optB || !optC || !optD) {
+    errBox.textContent = "Please fill in the question and all four options.";
+    errBox.classList.remove("hidden");
+    return false;
+  }
+
+  const newQuestion = { section, question, options: [optA, optB, optC, optD], answerIndex };
+
+  db.ref("questions").push(newQuestion)
+    .then(() => {
+      document.getElementById("qmQuestion").value = "";
+      document.getElementById("qmOptA").value = "";
+      document.getElementById("qmOptB").value = "";
+      document.getElementById("qmOptC").value = "";
+      document.getElementById("qmOptD").value = "";
+      showToast("Question added.", "success");
+      // The live listener attached in loadCustomQuestions() will refresh
+      // customQuestions and re-render this screen automatically.
+    })
+    .catch((err) => {
+      console.error("Error adding question:", err);
+      errBox.textContent = "Could not save the question. Please try again.";
+      errBox.classList.remove("hidden");
+    });
+
+  return false;
+}
+
+function deleteCustomQuestion(id) {
+  if (!db) return;
+  if (!confirm("Delete this question? It will be removed from the live test immediately for anyone who hasn't started yet.")) return;
+  db.ref("questions/" + id).remove()
+    .then(() => showToast("Question deleted.", "success"))
+    .catch((err) => {
+      console.error("Error deleting question:", err);
+      showToast("Could not delete the question. Please try again.", "error");
+    });
+}
+
+/* =========================================================
+   11C. UTILITIES — HTML escaping & toast notifications
+   escapeHtml() guards against XSS: question text/options can now
+   arrive in bulk from untrusted Excel/PDF uploads and are rendered
+   via innerHTML in several places (test screen, review, admin lists),
+   so everything user-supplied is escaped before insertion.
+========================================================= */
+function escapeHtml(str) {
+  return String(str == null ? "" : str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function showToast(message, type = "info", duration = 4500) {
+  const container = document.getElementById("toastContainer");
+  if (!container) { console.log(message); return; }
+  const icon = type === "success" ? "✅" : type === "error" ? "⚠" : "ℹ";
+  const el = document.createElement("div");
+  el.className = `toast ${type}`;
+  el.innerHTML = `<span>${icon}</span><span>${escapeHtml(message)}</span>`;
+  container.appendChild(el);
+  setTimeout(() => {
+    el.style.opacity = "0";
+    el.style.transition = "opacity .3s";
+    setTimeout(() => el.remove(), 300);
+  }, duration);
+}
+
+// Prevents formula injection: if a cell value starts with a character
+// Excel/Sheets would interpret as the start of a formula, prefix it
+// with an apostrophe so it's always treated as plain text on open.
+function sanitizeForExcelCell(value) {
+  const str = String(value == null ? "" : value);
+  if (/^[=+\-@\t\r]/.test(str)) return "'" + str;
+  return str;
+}
+
+/* =========================================================
+   11D. QUESTION IMPORT SYSTEM — EXCEL (.xlsx/.xls) + PDF (.pdf)
+   Auto-detects file type and routes to the right pipeline. Both
+   pipelines converge on the same `parsedImportRows` array and share
+   the same preview / edit / duplicate-detection / backup / chunked
+   write / summary code.
+
+   Row object shape (shared):
+   { _cid, rowNum, question, options[4], answerIndex, section,
+     difficulty, marks, negativeMarksVal, explanation,
+     status: 'valid'|'error'|'duplicate', errors[], source: 'excel'|'pdf',
+     editable: bool, pdfQNum (pdf only) }
+========================================================= */
+let importWorkbook = null;
+let parsedImportRows = [];       // shared rows, see shape above
+let previewFilter = "all";
+let previewPage = 1;
+const PREVIEW_PAGE_SIZE = 25;
+let importCancelRequested = false;   // cancels the Firebase write loop
+let pdfExtractionCancelRequested = false; // cancels the PDF page-reading loop
+let importRowIdCounter = 1;          // gives every parsed row a stable client id for editing
+let currentImportFileType = null;    // 'excel' | 'pdf' — used for summary/labelling only
+const MAX_IMPORT_FILE_SIZE = 25 * 1024 * 1024; // 25MB
+const PDF_MIN_TEXT_CHARS_PER_PAGE = 40; // below this, a page is treated as scanned/image-based and sent to OCR
+
+const IMPORT_COLUMN_ALIASES = {
+  question: ["question"],
+  a: ["option a", "optiona", "a"],
+  b: ["option b", "optionb", "b"],
+  c: ["option c", "optionc", "c"],
+  d: ["option d", "optiond", "d"],
+  correct: ["correct answer", "correctanswer", "answer"],
+  category: ["category", "section"],
+  difficulty: ["difficulty"],
+  marks: ["marks"],
+  negMarks: ["negative marks", "negativemarks"],
+  explanation: ["explanation"]
+};
+
+function findColumnKey(rowObj, aliases) {
+  const keys = Object.keys(rowObj);
+  for (const k of keys) {
+    if (aliases.includes(k.trim().toLowerCase())) return k;
+  }
+  return null;
+}
+
+// ---------- Modal open/close/reset ----------
+function openExcelImportModal() {
+  resetImportModal();
+  document.getElementById("excelImportModal").classList.remove("hidden");
+}
+
+function closeExcelImportModal() {
+  document.getElementById("excelImportModal").classList.add("hidden");
+  pdfExtractionCancelRequested = true; // stop any in-flight PDF extraction
+  terminateSharedTesseractWorker(); // fire-and-forget cleanup of the OCR worker, if one was spun up
+  resetImportModal();
+}
+
+function resetImportModal() {
+  importWorkbook = null;
+  parsedImportRows = [];
+  previewFilter = "all";
+  previewPage = 1;
+  importCancelRequested = false;
+  pdfExtractionCancelRequested = false;
+  currentImportFileType = null;
+  document.getElementById("importStepUpload").classList.remove("hidden");
+  document.getElementById("importStepPreview").classList.add("hidden");
+  document.getElementById("importStepProgress").classList.add("hidden");
+  document.getElementById("importStepSummary").classList.add("hidden");
+  document.getElementById("importSheetSelect").classList.add("hidden");
+  document.getElementById("importFileError").classList.add("hidden");
+  document.getElementById("importParsingIndicator").classList.add("hidden");
+  document.getElementById("importParsingIndicator").classList.remove("flex");
+  document.getElementById("pdfExtractionBox").classList.add("hidden");
+  document.getElementById("pdfPageStatusList").innerHTML = "";
+  document.getElementById("pdfExtractErrorSummary").classList.add("hidden");
+  document.getElementById("backupsListBox").classList.add("hidden");
+  document.getElementById("pdfEditHint").classList.add("hidden");
+  setActiveFiletypeTab(null);
+  const fileInput = document.getElementById("importFileInput");
+  if (fileInput) fileInput.value = "";
+  fileInput.setAttribute("accept", ".xlsx,.xls,.pdf");
+  const searchInput = document.getElementById("previewSearchInput");
+  if (searchInput) searchInput.value = "";
+  const dupCheckbox = document.getElementById("includeDuplicatesCheckbox");
+  if (dupCheckbox) dupCheckbox.checked = false;
+}
+
+// Purely visual: reflects which file type is active / was last detected,
+// and narrows the native file picker filter when the admin taps a tab.
+function setActiveFiletypeTab(type) {
+  const excelTab = document.getElementById("ftabExcel");
+  const pdfTab = document.getElementById("ftabPdf");
+  if (!excelTab || !pdfTab) return;
+  excelTab.classList.toggle("active", type === "excel");
+  pdfTab.classList.toggle("active", type === "pdf");
+}
+
+function setupFiletypeTabs() {
+  const excelTab = document.getElementById("ftabExcel");
+  const pdfTab = document.getElementById("ftabPdf");
+  const fileInput = document.getElementById("importFileInput");
+  if (excelTab) excelTab.addEventListener("click", () => {
+    setActiveFiletypeTab("excel");
+    if (fileInput) fileInput.setAttribute("accept", ".xlsx,.xls");
+  });
+  if (pdfTab) pdfTab.addEventListener("click", () => {
+    setActiveFiletypeTab("pdf");
+    if (fileInput) fileInput.setAttribute("accept", ".pdf");
+  });
+}
+
+// ---------- Drag & drop / browse wiring (attached once on page load) ----------
+function setupImportDropzone() {
+  const zone = document.getElementById("importDropzone");
+  const input = document.getElementById("importFileInput");
+  if (!zone || !input) return;
+
+  input.addEventListener("change", () => {
+    if (input.files && input.files[0]) handleImportFile(input.files[0]);
+  });
+
+  ["dragenter", "dragover"].forEach(evt => {
+    zone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); zone.classList.add("dragover"); });
+  });
+  ["dragleave", "drop"].forEach(evt => {
+    zone.addEventListener(evt, (e) => { e.preventDefault(); e.stopPropagation(); zone.classList.remove("dragover"); });
+  });
+  zone.addEventListener("drop", (e) => {
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (file) handleImportFile(file);
+  });
+
+  setupFiletypeTabs();
+}
+
+// ---------- Entry point: detect file type and route ----------
+function handleImportFile(file) {
+  const errEl = document.getElementById("importFileError");
+  errEl.classList.add("hidden");
+
+  const name = file.name.toLowerCase();
+  const isPdf = name.endsWith(".pdf");
+  const isExcel = name.endsWith(".xlsx") || name.endsWith(".xls");
+
+  if (!isPdf && !isExcel) {
+    errEl.textContent = "Unsupported file type. Please upload a .xlsx, .xls, or .pdf file.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  if (file.size === 0) {
+    errEl.textContent = "This file appears to be empty.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+  if (file.size > MAX_IMPORT_FILE_SIZE) {
+    errEl.textContent = "File is too large (max 25MB).";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  if (isPdf) {
+    currentImportFileType = "pdf";
+    setActiveFiletypeTab("pdf");
+    handlePdfFile(file);
+  } else {
+    currentImportFileType = "excel";
+    setActiveFiletypeTab("excel");
+    handleExcelFile(file);
+  }
+}
+
+/* =========================================================
+   11D-1. EXCEL PIPELINE
+========================================================= */
+function handleExcelFile(file) {
+  const errEl = document.getElementById("importFileError");
+  const indicator = document.getElementById("importParsingIndicator");
+  document.getElementById("importParsingLabel").textContent = "Reading and validating rows...";
+  indicator.classList.remove("hidden");
+  indicator.classList.add("flex");
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      if (!workbook.SheetNames.length) throw new Error("No sheets found");
+      importWorkbook = workbook;
+      if (workbook.SheetNames.length > 1) {
+        indicator.classList.add("hidden");
+        showSheetSelection(workbook);
+      } else {
+        parseRowsFromSheets([workbook.SheetNames[0]]);
+      }
+    } catch (err) {
+      console.error("Error parsing Excel file:", err);
+      indicator.classList.add("hidden");
+      errEl.textContent = "Could not read this file. Please make sure it's a valid, uncorrupted Excel file.";
+      errEl.classList.remove("hidden");
+    }
+  };
+  reader.onerror = () => {
+    indicator.classList.add("hidden");
+    errEl.textContent = "Error reading the file. Please try again.";
+    errEl.classList.remove("hidden");
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showSheetSelection(workbook) {
+  const box = document.getElementById("importSheetSelect");
+  const list = document.getElementById("importSheetList");
+  list.innerHTML = workbook.SheetNames.map((name, idx) => {
+    let rowCount = 0;
+    try { rowCount = XLSX.utils.sheet_to_json(workbook.Sheets[name], { defval: "" }).length; } catch (e) {}
+    return `
+      <label class="flex items-center gap-2 text-sm border border-gray-200 rounded-lg px-3 py-2">
+        <input type="checkbox" class="sheet-checkbox rounded" value="${escapeHtml(name)}" ${idx === 0 ? "checked" : ""}>
+        ${escapeHtml(name)} <span class="text-gray-400">(${rowCount} rows)</span>
+      </label>
+    `;
+  }).join("");
+  box.classList.remove("hidden");
+}
+
+function proceedWithSelectedSheets() {
+  const checked = Array.from(document.querySelectorAll(".sheet-checkbox:checked")).map(cb => cb.value);
+  if (!checked.length) { showToast("Select at least one sheet to import.", "error"); return; }
+  document.getElementById("importSheetSelect").classList.add("hidden");
+  const indicator = document.getElementById("importParsingIndicator");
+  document.getElementById("importParsingLabel").textContent = "Reading and validating rows...";
+  indicator.classList.remove("hidden");
+  indicator.classList.add("flex");
+  setTimeout(() => parseRowsFromSheets(checked), 30); // let the spinner paint first
+}
+
+async function parseRowsFromSheets(sheetNames) {
+  let allRaw = [];
+  try {
+    sheetNames.forEach(name => {
+      const sheet = importWorkbook.Sheets[name];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      allRaw = allRaw.concat(json);
+    });
+  } catch (err) {
+    console.error("Error reading sheet data:", err);
+  }
+
+  const indicator = document.getElementById("importParsingIndicator");
+  const errEl = document.getElementById("importFileError");
+
+  if (!allRaw.length) {
+    indicator.classList.add("hidden");
+    errEl.textContent = "No data rows found in the selected sheet(s). Make sure row 1 has the column headers.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  await validateAndClassifyExcelRows(allRaw);
+  indicator.classList.add("hidden");
+  showImportPreviewStep();
+}
+
+// ---------- Shared validation helpers ----------
+function normalizeQuestionText(text) {
+  return String(text || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function buildExistingQuestionSet() {
+  const set = new Set();
+  questionBank.forEach(q => set.add(normalizeQuestionText(q.question)));
+  customQuestions.forEach(q => set.add(normalizeQuestionText(q.question)));
+  return set;
+}
+
+// Yields to the browser's event loop so the UI (progress label, spinner)
+// can actually repaint between chunks of heavy synchronous work.
+function yieldToUI() {
+  return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function classifyOneExcelRow(raw, idx, colMap, existingSet, seenInFile) {
+  const rowNum = idx + 2; // +2 accounts for the header row and 1-based row numbering
+  const errors = [];
+
+  const question = colMap.question ? String(raw[colMap.question] || "").trim() : "";
+  const optA = colMap.a ? String(raw[colMap.a] || "").trim() : "";
+  const optB = colMap.b ? String(raw[colMap.b] || "").trim() : "";
+  const optC = colMap.c ? String(raw[colMap.c] || "").trim() : "";
+  const optD = colMap.d ? String(raw[colMap.d] || "").trim() : "";
+  const correctRaw = colMap.correct ? String(raw[colMap.correct] || "").trim() : "";
+  const category = (colMap.category ? String(raw[colMap.category] || "").trim() : "") || "General";
+  const difficulty = colMap.difficulty ? String(raw[colMap.difficulty] || "").trim() : "";
+  const marksVal = colMap.marks && raw[colMap.marks] !== "" ? Number(raw[colMap.marks]) : null;
+  const negMarksVal = colMap.negMarks && raw[colMap.negMarks] !== "" ? Number(raw[colMap.negMarks]) : null;
+  const explanation = colMap.explanation ? String(raw[colMap.explanation] || "").trim() : "";
+
+  if (!question) errors.push("Question text is missing.");
+  const options = [optA, optB, optC, optD];
+  if (!optA || !optB || !optC || !optD) errors.push("One or more options (A–D) is missing.");
+
+  let answerIndex = -1;
+  if (!correctRaw) {
+    errors.push("Correct Answer is missing.");
+  } else {
+    const letter = correctRaw.toUpperCase();
+    if (["A", "B", "C", "D"].includes(letter)) {
+      answerIndex = letter.charCodeAt(0) - 65;
+    } else {
+      const textMatchIdx = options.findIndex(o => o && o.toLowerCase() === correctRaw.toLowerCase());
+      if (textMatchIdx !== -1) answerIndex = textMatchIdx;
+      else errors.push(`Correct Answer "${correctRaw}" must be A/B/C/D or match one of the options exactly.`);
+    }
+  }
+
+  if (marksVal !== null && isNaN(marksVal)) errors.push("Marks must be a number.");
+  if (negMarksVal !== null && isNaN(negMarksVal)) errors.push("Negative Marks must be a number.");
+
+  let status = errors.length ? "error" : "valid";
+
+  if (status === "valid") {
+    const normalized = normalizeQuestionText(question);
+    if (existingSet.has(normalized) || seenInFile.has(normalized)) {
+      status = "duplicate";
+    } else {
+      seenInFile.add(normalized);
+    }
+  }
+
+  return {
+    _cid: importRowIdCounter++,
+    rowNum, question, options, answerIndex,
+    section: category, difficulty,
+    marks: marksVal, negativeMarksVal: negMarksVal, explanation,
+    status, errors, source: "excel", editable: true
+  };
+}
+
+// Processes rows in chunks with a UI yield between each chunk, so files
+// with thousands of rows keep the tab responsive and show live progress
+// instead of freezing for several seconds on one long synchronous loop.
+const EXCEL_VALIDATION_CHUNK_SIZE = 500;
+
+async function validateAndClassifyExcelRows(allRaw) {
+  const existingSet = buildExistingQuestionSet();
+  const seenInFile = new Set();
+  parsedImportRows = [];
+
+  const sampleRow = allRaw[0];
+  const colMap = {
+    question: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.question),
+    a: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.a),
+    b: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.b),
+    c: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.c),
+    d: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.d),
+    correct: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.correct),
+    category: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.category),
+    difficulty: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.difficulty),
+    marks: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.marks),
+    negMarks: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.negMarks),
+    explanation: findColumnKey(sampleRow, IMPORT_COLUMN_ALIASES.explanation)
+  };
+
+  const indicator = document.getElementById("importParsingIndicator");
+  const label = document.getElementById("importParsingLabel");
+  const showProgress = allRaw.length > EXCEL_VALIDATION_CHUNK_SIZE;
+
+  for (let i = 0; i < allRaw.length; i++) {
+    parsedImportRows.push(classifyOneExcelRow(allRaw[i], i, colMap, existingSet, seenInFile));
+
+    if (showProgress && i % EXCEL_VALIDATION_CHUNK_SIZE === 0) {
+      if (label) label.textContent = `Validating row ${i + 1} of ${allRaw.length}...`;
+      await yieldToUI();
+    }
+  }
+  if (label) label.textContent = "Reading and validating rows...";
+}
+
+/* =========================================================
+   11D-2. PDF PIPELINE
+   Reads text-based pages directly via pdf.js; falls back to OCR
+   (Tesseract.js) for pages whose extracted text is too sparse to
+   be a real text layer (i.e. scanned/image-based pages). Then
+   strips repeated headers/footers/page numbers and parses the
+   remaining lines into question/option/answer blocks.
+========================================================= */
+async function handlePdfFile(file) {
+  const errEl = document.getElementById("importFileError");
+  const box = document.getElementById("pdfExtractionBox");
+  const statusList = document.getElementById("pdfPageStatusList");
+  const errSummary = document.getElementById("pdfExtractErrorSummary");
+  pdfExtractionCancelRequested = false;
+  statusList.innerHTML = "";
+  errSummary.classList.add("hidden");
+  box.classList.remove("hidden");
+  document.getElementById("pdfExtractProgressBar").style.width = "0%";
+
+  if (typeof pdfjsLib === "undefined") {
+    box.classList.add("hidden");
+    errEl.textContent = "PDF reading library failed to load. Please check your internet connection and try again.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  let pdfDoc;
+  try {
+    const buffer = await file.arrayBuffer();
+    pdfDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
+  } catch (err) {
+    console.error("Error opening PDF:", err);
+    box.classList.add("hidden");
+    errEl.textContent = "Could not open this PDF. It may be corrupted, password-protected, or not a valid PDF file.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  const totalPages = pdfDoc.numPages;
+  document.getElementById("pdfPageTotal").textContent = totalPages;
+  document.getElementById("pdfPageProgress").textContent = "0";
+
+  const pagesData = []; // [{ pageNum, text }]
+  const failedPages = [];
+
+  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
+    if (pdfExtractionCancelRequested) break;
+
+    const statusRow = document.createElement("div");
+    statusRow.className = "pdf-page-status text-gray-500";
+    statusRow.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span> Page ${pageNum}: reading...`;
+    statusList.appendChild(statusRow);
+    statusList.scrollTop = statusList.scrollHeight;
+
+    try {
+      const page = await pdfDoc.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(it => it.str).join(" ").replace(/\s+/g, " ").trim();
+
+      if (pageText.length >= PDF_MIN_TEXT_CHARS_PER_PAGE) {
+        // Real text layer — use it directly and preserve line breaks
+        // by grouping text items by their vertical position.
+        const structuredText = groupTextItemsIntoLines(textContent.items);
+        pagesData.push({ pageNum, text: structuredText });
+        statusRow.className = "pdf-page-status text-green-600";
+        statusRow.innerHTML = `✓ Page ${pageNum}: text extracted`;
+      } else {
+        // Sparse/no text layer — likely a scanned image page. Rasterize
+        // and run OCR with Tesseract.js.
+        statusRow.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span> Page ${pageNum}: scanned page detected, running OCR...`;
+        const ocrText = await ocrPdfPage(page, pageNum, (progress) => {
+          statusRow.innerHTML = `<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span> Page ${pageNum}: OCR ${Math.round(progress*100)}%...`;
+        });
+        pagesData.push({ pageNum, text: ocrText });
+        statusRow.className = "pdf-page-status text-blue-600";
+        statusRow.innerHTML = `✓ Page ${pageNum}: text extracted via OCR`;
+      }
+    } catch (pageErr) {
+      console.error(`Error processing PDF page ${pageNum}:`, pageErr);
+      failedPages.push(pageNum);
+      statusRow.className = "pdf-page-status text-red-600";
+      statusRow.innerHTML = `✗ Page ${pageNum}: could not be processed`;
+    }
+
+    document.getElementById("pdfPageProgress").textContent = pageNum;
+    document.getElementById("pdfExtractProgressBar").style.width = `${Math.round((pageNum / totalPages) * 100)}%`;
+  }
+
+  await terminateSharedTesseractWorker(); // free the OCR worker's memory now that extraction is done
+  box.classList.add("hidden");
+
+  if (failedPages.length) {
+    errSummary.textContent = `${failedPages.length} page(s) could not be processed and were skipped: ${failedPages.join(", ")}.`;
+    errSummary.classList.remove("hidden");
+  }
+
+  if (!pagesData.length) {
+    errEl.textContent = pdfExtractionCancelRequested
+      ? "PDF extraction was cancelled before any pages were read."
+      : "No readable content was found in this PDF.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  const cleanedLines = stripHeadersFootersAndPageNumbers(pagesData);
+  const draftQuestions = parseQuestionsFromLines(cleanedLines);
+
+  if (!draftQuestions.length) {
+    errEl.textContent = "No questions could be detected in this PDF. Make sure questions are numbered (e.g. \"1.\") with options labelled A–D.";
+    errEl.classList.remove("hidden");
+    return;
+  }
+
+  validateAndClassifyPdfRows(draftQuestions);
+  showImportPreviewStep();
+}
+
+function requestCancelPdfExtraction() {
+  if (!confirm("Stop reading the remaining PDF pages? Questions found so far will still be processed.")) return;
+  pdfExtractionCancelRequested = true;
+}
+
+// Groups pdf.js text items into visual lines using their y-coordinate,
+// so wrapped/columnar text still comes out as sensible line breaks
+// instead of one giant run-on string.
+function groupTextItemsIntoLines(items) {
+  const rows = [];
+  const Y_TOLERANCE = 3;
+  items.forEach(item => {
+    const y = item.transform ? item.transform[5] : 0;
+    let row = rows.find(r => Math.abs(r.y - y) <= Y_TOLERANCE);
+    if (!row) {
+      row = { y, parts: [] };
+      rows.push(row);
+    }
+    row.parts.push(item.str);
+  });
+  // pdf.js coordinates increase upward, so sort top-to-bottom (descending y)
+  rows.sort((a, b) => b.y - a.y);
+  return rows.map(r => r.parts.join(" ").replace(/\s+/g, " ").trim()).filter(Boolean).join("\n");
+}
+
+// A fresh Tesseract worker loads and initializes the OCR language data
+// from scratch — expensive if repeated for every page. Instead, we spin
+// up ONE worker lazily on first use and reuse it for every scanned page
+// in this import, which is a large speedup for multi-page scanned PDFs.
+// It's torn down once extraction finishes (or the modal is closed).
+let sharedTesseractWorker = null;
+let sharedTesseractWorkerPromise = null;
+let ocrProgressCallback = null; // read by the worker's logger, set per-page
+
+function getSharedTesseractWorker() {
+  if (sharedTesseractWorker) return Promise.resolve(sharedTesseractWorker);
+  if (!sharedTesseractWorkerPromise) {
+    sharedTesseractWorkerPromise = Tesseract.createWorker("eng", 1, {
+      logger: (m) => {
+        if (m.status === "recognizing text" && typeof ocrProgressCallback === "function") {
+          ocrProgressCallback(m.progress || 0);
+        }
+      }
+    }).then(worker => { sharedTesseractWorker = worker; return worker; });
+  }
+  return sharedTesseractWorkerPromise;
+}
+
+async function terminateSharedTesseractWorker() {
+  const worker = sharedTesseractWorker;
+  sharedTesseractWorker = null;
+  sharedTesseractWorkerPromise = null;
+  if (worker) {
+    try { await worker.terminate(); } catch (e) { console.warn("Error terminating OCR worker:", e); }
+  }
+}
+
+// Rasterizes a PDF page to a canvas and runs Tesseract OCR on it using
+// the shared, already-warmed-up worker.
+async function ocrPdfPage(page, pageNum, onProgress) {
+  const viewport = page.getViewport({ scale: 2.0 }); // higher scale = better OCR accuracy
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  const worker = await getSharedTesseractWorker();
+  ocrProgressCallback = onProgress;
+  let result;
+  try {
+    result = await worker.recognize(canvas);
+  } finally {
+    ocrProgressCallback = null;
+  }
+  return (result && result.data && result.data.text) ? result.data.text : "";
+}
+
+// Removes lines that are page numbers ("Page 3", "3 of 50") or that
+// repeat identically across a large fraction of pages (running
+// headers/footers like a company name or document title on every page).
+function stripHeadersFootersAndPageNumbers(pagesData) {
+  const pageLineLists = pagesData.map(p => p.text.split(/\r?\n/).map(l => l.trim()).filter(Boolean));
+  const totalPages = pageLineLists.length;
+
+  const lineFreq = {};
+  pageLineLists.forEach(lines => {
+    new Set(lines.map(l => l.toLowerCase())).forEach(norm => {
+      lineFreq[norm] = (lineFreq[norm] || 0) + 1;
+    });
+  });
+
+  const isPageNumberLine = (l) => /^(page\s*)?\d{1,4}(\s*(of|\/)\s*\d{1,4})?$/i.test(l);
+
+  const cleaned = [];
+  pageLineLists.forEach(lines => {
+    lines.forEach(l => {
+      const norm = l.toLowerCase();
+      const freq = lineFreq[norm] || 0;
+      const isRepeatedHeaderFooter = totalPages > 2 && l.length < 90 && freq >= Math.max(3, Math.ceil(totalPages * 0.4));
+      if (isPageNumberLine(l) || isRepeatedHeaderFooter) return;
+      cleaned.push(l);
+    });
+  });
+  return cleaned;
+}
+
+// State-machine parser: turns a flat list of cleaned lines into
+// { pdfQNum, question, options[4], answerIndex, section } drafts.
+function parseQuestionsFromLines(lines) {
+  const qStartRe = /^(?:Q(?:uestion)?\.?\s*)?(\d{1,4})[\.\)\:]\s+(.+)$/i;
+  const optRe = /^\(?([A-Da-d])[\.\)\:]\s*(.*)$/;
+  // Capture everything after the "Answer:" label — it may be a bare
+  // letter (A/B/C/D) or the full option text (e.g. "Answer: Keyboard"),
+  // resolved against the collected options once the question is complete.
+  const ansRe = /^(?:Ans(?:wer)?|Correct\s*Answer|Correct)\s*[:\-]?\s*(.+)$/i;
+
+  const rawQuestions = [];
+  let current = null;
+
+  function pushCurrent() {
+    if (current && (current.questionLines.length || current.options.length)) {
+      rawQuestions.push(current);
+    }
+    current = null;
+  }
+
+  lines.forEach(line => {
+    const qm = line.match(qStartRe);
+    if (qm) {
+      pushCurrent();
+      current = { num: qm[1], questionLines: [qm[2]], options: [], answerRaw: null };
+      return;
+    }
+    if (!current) return; // ignore stray lines before the first detected question
+
+    const am = line.match(ansRe);
+    if (am) {
+      current.answerRaw = am[1].trim();
+      return;
+    }
+
+    const om = line.match(optRe);
+    if (om && current.options.length < 4) {
+      current.options.push(om[2].trim());
+      return;
+    }
+
+    // Continuation/wrapped line: extend the question text if options
+    // haven't started, otherwise extend the most recent option.
+    if (current.options.length === 0) {
+      current.questionLines.push(line);
+    } else {
+      const lastIdx = current.options.length - 1;
+      current.options[lastIdx] = (current.options[lastIdx] + " " + line).trim();
+    }
+  });
+  pushCurrent();
+
+  return rawQuestions.map(q => {
+    const questionText = q.questionLines.join(" ").replace(/\s+/g, " ").trim();
+    const options = [0, 1, 2, 3].map(i => (q.options[i] || "").trim());
+    let answerIndex = -1;
+
+    if (q.answerRaw) {
+      const raw = q.answerRaw.trim();
+      const letterOnly = raw.match(/^\(?([A-Da-d])\)?\.?$/); // e.g. "B", "(B)", "B."
+      if (letterOnly) {
+        answerIndex = letterOnly[1].toUpperCase().charCodeAt(0) - 65;
+      } else {
+        // Fall back to matching the full option text (case-insensitive),
+        // then a loose "starts with" match to tolerate trailing punctuation.
+        let idx = options.findIndex(o => o && o.toLowerCase() === raw.toLowerCase());
+        if (idx === -1) idx = options.findIndex(o => o && raw.toLowerCase().startsWith(o.toLowerCase()) && o.length > 2);
+        if (idx !== -1) answerIndex = idx;
+      }
+    }
+
+    return { pdfQNum: q.num, question: questionText, options, answerIndex, section: "General" };
+  }).filter(q => q.question || q.options.some(o => o)); // drop fully-empty artifacts
+}
+
+function validateAndClassifyPdfRows(draftQuestions) {
+  const existingSet = buildExistingQuestionSet();
+  const seenInFile = new Set();
+  parsedImportRows = [];
+
+  draftQuestions.forEach((q, idx) => {
+    const rowNum = idx + 1;
+    const errors = [];
+
+    if (!q.question) errors.push("Question text could not be extracted — please edit manually.");
+    if (q.options.some(o => !o)) errors.push("One or more options (A–D) could not be extracted.");
+
+    let answerIndex = q.answerIndex;
+    if (answerIndex === undefined || answerIndex === null || answerIndex < 0 || answerIndex > 3) {
+      errors.push("Correct answer was not detected — please edit and select it.");
+      answerIndex = -1;
+    }
+
+    let status = errors.length ? "error" : "valid";
+    if (status === "valid") {
+      const normalized = normalizeQuestionText(q.question);
+      if (existingSet.has(normalized) || seenInFile.has(normalized)) {
+        status = "duplicate";
+      } else {
+        seenInFile.add(normalized);
+      }
+    }
+
+    parsedImportRows.push({
+      _cid: importRowIdCounter++,
+      rowNum, question: q.question, options: q.options, answerIndex,
+      section: q.section || "General", difficulty: "", marks: null, negativeMarksVal: null, explanation: "",
+      status, errors, source: "pdf", editable: true, pdfQNum: q.pdfQNum
+    });
+  });
+}
+
+/* =========================================================
+   11D-3. PREVIEW STEP (shared by Excel and PDF)
+========================================================= */
+function showImportPreviewStep() {
+  document.getElementById("importStepUpload").classList.add("hidden");
+  document.getElementById("importStepPreview").classList.remove("hidden");
+  previewFilter = "all";
+  previewPage = 1;
+  document.querySelectorAll(".import-tab").forEach(t => t.classList.toggle("active", t.dataset.filter === "all"));
+  document.getElementById("pdfEditHint").classList.toggle("hidden", currentImportFileType !== "pdf");
+  renderPreviewSummary();
+  renderImportPreviewTable();
+}
+
+function renderPreviewSummary() {
+  document.getElementById("prevTotal").textContent = parsedImportRows.length;
+  document.getElementById("prevValid").textContent = parsedImportRows.filter(r => r.status === "valid").length;
+  document.getElementById("prevDuplicate").textContent = parsedImportRows.filter(r => r.status === "duplicate").length;
+  document.getElementById("prevError").textContent = parsedImportRows.filter(r => r.status === "error").length;
+}
+
+function setPreviewFilter(filter) {
+  previewFilter = filter;
+  previewPage = 1;
+  document.querySelectorAll(".import-tab").forEach(t => t.classList.toggle("active", t.dataset.filter === filter));
+  renderImportPreviewTable();
+}
+
+function previewChangePage(delta) {
+  previewPage = Math.max(1, previewPage + delta);
+  renderImportPreviewTable();
+}
+
+let editingRowCid = null; // the _cid of the row currently open for inline editing
+
+function renderImportPreviewTable() {
+  const search = document.getElementById("previewSearchInput").value.trim().toLowerCase();
+  let filtered = parsedImportRows.filter(r => previewFilter === "all" || r.status === previewFilter);
+  if (search) filtered = filtered.filter(r => r.question.toLowerCase().includes(search));
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PREVIEW_PAGE_SIZE));
+  previewPage = Math.min(previewPage, totalPages);
+  const pageRows = filtered.slice((previewPage - 1) * PREVIEW_PAGE_SIZE, previewPage * PREVIEW_PAGE_SIZE);
+
+  const tbody = document.getElementById("previewTableBody");
+  tbody.innerHTML = pageRows.map(r => {
+    if (editingRowCid === r._cid) return renderEditRow(r);
+
+    const badge = r.status === "valid" ? '<span class="status-badge status-valid">✓ Valid</span>'
+      : r.status === "duplicate" ? '<span class="status-badge status-duplicate">⚠ Duplicate</span>'
+      : '<span class="status-badge status-error">✗ Error</span>';
+    const correctLabel = r.answerIndex >= 0 ? `${String.fromCharCode(65 + r.answerIndex)}) ${escapeHtml(r.options[r.answerIndex] || "")}` : "-";
+    const details = r.status === "error" ? escapeHtml(r.errors.join(" ")) : (r.status === "duplicate" ? "Matches an existing question." : "—");
+    const qLabel = escapeHtml(r.question) || '<span class="text-gray-300">(empty)</span>';
+    const sourceTag = r.source === "pdf" ? `<span class="text-[10px] text-gray-400 ml-1">(PDF${r.pdfQNum ? " Q" + escapeHtml(r.pdfQNum) : ""})</span>` : "";
+    return `
+      <tr class="border-t border-gray-100">
+        <td class="p-2.5 text-gray-500">${r.rowNum}</td>
+        <td class="p-2.5">${badge}</td>
+        <td class="p-2.5 max-w-xs truncate" title="${escapeHtml(r.question)}">${qLabel}${sourceTag}</td>
+        <td class="p-2.5">${escapeHtml(r.section)}</td>
+        <td class="p-2.5">${correctLabel}</td>
+        <td class="p-2.5 text-gray-500">${details}</td>
+        <td class="p-2.5 whitespace-nowrap">
+          <button onclick="startEditPreviewRow(${r._cid})" class="text-blue-600 hover:underline font-medium text-xs mr-2">Edit</button>
+          <button onclick="removePreviewRow(${r._cid})" class="text-red-600 hover:underline font-medium text-xs">Remove</button>
+        </td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="7" class="p-6 text-center text-gray-400">No rows match this filter.</td></tr>`;
+
+  document.getElementById("previewPageLabel").textContent = previewPage;
+  document.getElementById("previewPageTotal").textContent = totalPages;
+  document.getElementById("previewShownCount").textContent = filtered.length;
+}
+
+// Renders a full inline edit form (spanning all columns) in place of a
+// single preview row, letting the admin correct anything the parser
+// got wrong before it's ever written to the database.
+function renderEditRow(r) {
+  const optionInputs = [0, 1, 2, 3].map(i => `
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-bold text-gray-400 w-4">${String.fromCharCode(65 + i)}</span>
+      <input type="text" class="edit-field" id="editOpt${i}_${r._cid}" value="${escapeHtml(r.options[i] || "")}" placeholder="Option ${String.fromCharCode(65+i)}">
+      <label class="flex items-center gap-1 text-xs text-gray-500 shrink-0">
+        <input type="radio" name="editCorrect_${r._cid}" value="${i}" ${r.answerIndex === i ? "checked" : ""}> correct
+      </label>
+    </div>
+  `).join("");
+
+  return `
+    <tr class="border-t border-gray-100 bg-blue-50/40">
+      <td colspan="7" class="p-4">
+        <div class="space-y-3">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Question</label>
+            <textarea id="editQuestion_${r._cid}" rows="2" class="edit-field">${escapeHtml(r.question)}</textarea>
+          </div>
+          <div class="grid sm:grid-cols-2 gap-2">${optionInputs}</div>
+          <div class="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Category / Section</label>
+              <input type="text" id="editSection_${r._cid}" class="edit-field" value="${escapeHtml(r.section)}">
+            </div>
+          </div>
+          <div class="flex gap-3 pt-1">
+            <button onclick="saveEditPreviewRow(${r._cid})" class="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-4 py-2 rounded-lg">💾 Save Changes</button>
+            <button onclick="cancelEditPreviewRow()" class="border border-gray-300 text-gray-600 text-xs font-semibold px-4 py-2 rounded-lg hover:bg-gray-50">Cancel</button>
+            <button onclick="removePreviewRow(${r._cid})" class="border border-red-300 text-red-600 text-xs font-semibold px-4 py-2 rounded-lg hover:bg-red-50 ml-auto">Remove Question</button>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function startEditPreviewRow(cid) {
+  editingRowCid = cid;
+  renderImportPreviewTable();
+}
+
+function cancelEditPreviewRow() {
+  editingRowCid = null;
+  renderImportPreviewTable();
+}
+
+// Re-runs required-field + duplicate validation for a single row after
+// the admin edits it, without touching any other row's status.
+function revalidateSingleRow(r) {
+  const errors = [];
+  if (!r.question || !r.question.trim()) errors.push("Question text is missing.");
+  if (r.options.some(o => !o || !o.trim())) errors.push("One or more options (A–D) is missing.");
+  if (r.answerIndex === undefined || r.answerIndex === null || r.answerIndex < 0 || r.answerIndex > 3) {
+    errors.push("A correct answer must be selected.");
+  }
+
+  let status = errors.length ? "error" : "valid";
+  if (status === "valid") {
+    const existingSet = buildExistingQuestionSet();
+    const normalized = normalizeQuestionText(r.question);
+    const dupInFile = parsedImportRows.some(other => other._cid !== r._cid && normalizeQuestionText(other.question) === normalized);
+    if (existingSet.has(normalized) || dupInFile) status = "duplicate";
+  }
+  r.status = status;
+  r.errors = errors;
+}
+
+function saveEditPreviewRow(cid) {
+  const r = parsedImportRows.find(row => row._cid === cid);
+  if (!r) return;
+
+  r.question = document.getElementById(`editQuestion_${cid}`).value.trim();
+  r.options = [0, 1, 2, 3].map(i => document.getElementById(`editOpt${i}_${cid}`).value.trim());
+  r.section = document.getElementById(`editSection_${cid}`).value.trim() || "General";
+  const correctRadio = document.querySelector(`input[name="editCorrect_${cid}"]:checked`);
+  r.answerIndex = correctRadio ? parseInt(correctRadio.value, 10) : -1;
+
+  revalidateSingleRow(r);
+  editingRowCid = null;
+  renderPreviewSummary();
+  renderImportPreviewTable();
+  showToast("Row updated.", "success");
+}
+
+function removePreviewRow(cid) {
+  if (!confirm("Remove this question from the import? It will not be saved to the database.")) return;
+  parsedImportRows = parsedImportRows.filter(r => r._cid !== cid);
+  if (editingRowCid === cid) editingRowCid = null;
+  renderPreviewSummary();
+  renderImportPreviewTable();
+}
+
+function cancelImport() {
+  if (!confirm("Cancel this import? Nothing has been saved to the database yet.")) return;
+  resetImportModal();
+}
+
+function getRowsToImport() {
+  const includeDup = document.getElementById("includeDuplicatesCheckbox").checked;
+  return parsedImportRows.filter(r => r.status === "valid" || (includeDup && r.status === "duplicate"));
+}
+
+/* =========================================================
+   11D-4. AUTOMATIC BACKUP BEFORE BULK IMPORT
+========================================================= */
+async function createBackupSnapshot() {
+  if (!db) return null;
+  const snap = await db.ref("questions").once("value");
+  const data = snap.exists() ? snap.val() : {};
+  const backupId = "backup_" + Date.now();
+  await db.ref("questions_backups/" + backupId).set({
+    createdAt: firebase.database.ServerValue.TIMESTAMP,
+    count: Object.keys(data).length,
+    data
+  });
+  return backupId;
+}
+
+function toggleBackupsList() {
+  const box = document.getElementById("backupsListBox");
+  box.classList.toggle("hidden");
+  if (!box.classList.contains("hidden")) loadBackupsList();
+}
+
+async function loadBackupsList() {
+  const box = document.getElementById("backupsListBox");
+  box.innerHTML = '<p class="text-xs text-gray-400">Loading...</p>';
+  if (!db) { box.innerHTML = '<p class="text-xs text-gray-400">Firebase is not configured.</p>'; return; }
+  try {
+    const snap = await db.ref("questions_backups").limitToLast(5).once("value");
+    if (!snap.exists()) {
+      box.innerHTML = '<p class="text-xs text-gray-400">No backups yet — one is created automatically before your first import.</p>';
+      return;
+    }
+    const items = [];
+    snap.forEach(child => items.push({ id: child.key, ...child.val() }));
+    items.reverse();
+    box.innerHTML = items.map(b => `
+      <div class="flex items-center justify-between text-xs border border-gray-200 rounded-lg px-3 py-2">
+        <span>${b.createdAt ? escapeHtml(new Date(b.createdAt).toLocaleString("en-IN")) : escapeHtml(b.id)} — ${b.count ?? 0} custom questions</span>
+        <button onclick="restoreBackup('${b.id}')" class="text-blue-600 hover:underline font-medium">Restore</button>
+      </div>
+    `).join("");
+  } catch (e) {
+    console.error(e);
+    box.innerHTML = '<p class="text-xs text-red-500">Could not load backups.</p>';
+  }
+}
+
+async function restoreBackup(backupId) {
+  if (!confirm("This will REPLACE the entire current custom question set with this backup. This cannot be undone. Continue?")) return;
+  try {
+    const snap = await db.ref("questions_backups/" + backupId + "/data").once("value");
+    const data = snap.exists() ? snap.val() : {};
+    await db.ref("questions").set(data);
+    showToast("Backup restored successfully.", "success");
+    closeExcelImportModal();
+  } catch (e) {
+    console.error(e);
+    showToast("Could not restore this backup.", "error");
+  }
+}
+
+/* =========================================================
+   11D-5. IMPORT EXECUTION (chunked writes + progress) — shared
+   by Excel and PDF rows since both converge on parsedImportRows.
+========================================================= */
+async function confirmImport() {
+  const rows = getRowsToImport();
+  if (!rows.length) { showToast("No valid rows to import.", "error"); return; }
+  if (!db) { showToast("Firebase is not configured — cannot import.", "error"); return; }
+
+  importCancelRequested = false;
+  document.getElementById("importStepPreview").classList.add("hidden");
+  document.getElementById("importStepProgress").classList.remove("hidden");
+  document.getElementById("importProgressTotal").textContent = rows.length;
+  document.getElementById("importProgressCount").textContent = "0";
+  document.getElementById("importProgressBar").style.width = "0%";
+
+  try {
+    await createBackupSnapshot();
+  } catch (e) {
+    console.warn("Backup before import failed — continuing with import anyway:", e);
+  }
+
+  const CHUNK_SIZE = 300;
+  let importedCount = 0;
+  let failedWrites = 0;
+  let attempted = 0;
+
+  for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+    if (importCancelRequested) break;
+    const chunk = rows.slice(i, i + CHUNK_SIZE);
+    const updateObj = {};
+    chunk.forEach(row => {
+      const key = db.ref("questions").push().key;
+      updateObj[key] = {
+        section: row.section,
+        question: row.question,
+        options: row.options,
+        answerIndex: row.answerIndex,
+        difficulty: row.difficulty || null,
+        marks: row.marks != null ? row.marks : null,
+        negativeMarksVal: row.negativeMarksVal != null ? row.negativeMarksVal : null,
+        explanation: row.explanation || null,
+        importSource: row.source || "manual",
+        importedAt: firebase.database.ServerValue.TIMESTAMP
+      };
+    });
+
+    try {
+      await db.ref("questions").update(updateObj);
+      importedCount += chunk.length;
+    } catch (e) {
+      console.error("Chunk import failed:", e);
+      failedWrites += chunk.length;
+    }
+
+    attempted += chunk.length;
+    document.getElementById("importProgressCount").textContent = attempted;
+    document.getElementById("importProgressBar").style.width = `${Math.round((attempted / rows.length) * 100)}%`;
+  }
+
+  const errorRows = parsedImportRows.filter(r => r.status === "error").length;
+  const includeDup = document.getElementById("includeDuplicatesCheckbox").checked;
+  const duplicateRows = parsedImportRows.filter(r => r.status === "duplicate").length;
+  const skippedDuplicates = includeDup ? 0 : duplicateRows;
+  const notAttempted = rows.length - attempted;
+
+  document.getElementById("importStepProgress").classList.add("hidden");
+  document.getElementById("importStepSummary").classList.remove("hidden");
+  document.getElementById("sumUploaded").textContent = parsedImportRows.length;
+  document.getElementById("sumImported").textContent = importedCount;
+  document.getElementById("sumSkipped").textContent = skippedDuplicates + notAttempted;
+  document.getElementById("sumFailed").textContent = errorRows + failedWrites;
+
+  showToast(
+    importCancelRequested
+      ? `Import stopped early: ${importedCount} saved before cancelling.`
+      : `Import complete: ${importedCount} imported, ${skippedDuplicates} duplicates skipped, ${errorRows + failedWrites} failed.`,
+    failedWrites > 0 ? "error" : "success"
+  );
+  // customQuestions / Manage Questions list refresh automatically via the
+  // live loadCustomQuestions() listener as soon as Firebase pushes the update.
+}
+
+function requestCancelImportWrite() {
+  if (!confirm("Stop importing the remaining questions? Questions already saved will stay in the database.")) return;
+  importCancelRequested = true;
+}
+
+/* =========================================================
+   11D-6. DOWNLOAD TEMPLATE & EXPORT EXISTING BANK
+========================================================= */
+function downloadSampleTemplate() {
+  const sampleData = [
+    { "Question": "Which of the following is an input device?", "Option A": "Monitor", "Option B": "Keyboard", "Option C": "Printer", "Option D": "Speaker", "Correct Answer": "B", "Category": "Hardware", "Difficulty": "Easy", "Marks": 1, "Negative Marks": 0.25, "Explanation": "A keyboard is used to input data into a computer." },
+    { "Question": "WWW stands for?", "Option A": "World Wide Web", "Option B": "World Wide Wire", "Option C": "Web Wide World", "Option D": "Wide World Web", "Correct Answer": "World Wide Web", "Category": "Internet", "Difficulty": "Easy", "Marks": 1, "Negative Marks": 0.25, "Explanation": "WWW stands for World Wide Web." }
+  ];
+  const ws = XLSX.utils.json_to_sheet(sampleData);
+  ws["!cols"] = [{ wch: 42 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 12 }, { wch: 8 }, { wch: 15 }, { wch: 35 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Questions");
+  XLSX.writeFile(wb, "Question_Import_Template.xlsx");
+  showToast("Sample template downloaded.", "success");
+}
+
+function exportQuestionBankToExcel() {
+  const all = questionBank.map(q => ({ ...q, source: "Built-in" }))
+    .concat(customQuestions.map(q => ({ ...q, source: "Custom" })));
+  if (!all.length) { showToast("No questions to export.", "error"); return; }
+
+  const rows = all.map((q, i) => ({
+    "S.No": i + 1,
+    "Question": sanitizeForExcelCell(q.question),
+    "Option A": sanitizeForExcelCell(q.options[0]),
+    "Option B": sanitizeForExcelCell(q.options[1]),
+    "Option C": sanitizeForExcelCell(q.options[2]),
+    "Option D": sanitizeForExcelCell(q.options[3]),
+    "Correct Answer": String.fromCharCode(65 + q.answerIndex),
+    "Category": sanitizeForExcelCell(q.section),
+    "Difficulty": sanitizeForExcelCell(q.difficulty || ""),
+    "Marks": q.marks != null ? q.marks : "",
+    "Negative Marks": q.negativeMarksVal != null ? q.negativeMarksVal : "",
+    "Explanation": sanitizeForExcelCell(q.explanation || ""),
+    "Source": q.source
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Question Bank");
+  XLSX.writeFile(wb, `Question_Bank_Export_${Date.now()}.xlsx`);
+  showToast(`Exported ${rows.length} questions.`, "success");
+}
+
+/* =========================================================
+   12. INIT ON LOAD — restore in-progress test if page refreshed
+========================================================= */
+window.addEventListener("DOMContentLoaded", () => {
+  loadState();
+  loadCustomQuestions();
+  setupImportDropzone();
+
+  // If this page was opened via a certificate QR code scan
+  // (URL like ...?verify=OSITS-12345678), jump straight to the
+  // verification screen and auto-run the lookup for that Certificate ID.
+  const urlParams = new URLSearchParams(window.location.search);
+  const scannedCert = urlParams.get("verify");
+  if (scannedCert) {
+    showScreen("verifyScreen");
+    document.getElementById("adminNavBtn").classList.remove("hidden");
+    const input = document.getElementById("verifyCertInput");
+    input.value = scannedCert;
+    handleVerifyCertificate(null);
+    return;
+  }
+
+  if (state.testStarted && !state.testSubmitted && state.student) {
+    document.getElementById("instrStudentName").textContent = state.student.fullName;
+    showScreen("testScreen");
+    buildPalette();
+    renderQuestion();
+    startTimer();
+    updateTabSwitchWarning();
+    document.addEventListener("contextmenu", disableAction);
+    document.addEventListener("copy", disableAction);
+    document.addEventListener("cut", disableAction);
+    document.addEventListener("paste", disableAction);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    document.addEventListener("keydown", handleTestKeyboardShortcut);
+  } else if (state.testSubmitted && state.result && state.student) {
+    document.getElementById("instrStudentName").textContent = state.student.fullName;
+    renderResult();
+    showScreen("resultScreen");
+  } else {
+    showScreen("registrationScreen");
+  }
+
+  document.getElementById("adminNavBtn").classList.remove("hidden");
+});
+</script>
+</body>
+</html>
